@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Panel — macremote</title>
+<meta name="theme-color" content="#0b0d12" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     TOKENS
+     ============================================================ */
+  :root {
+    color-scheme: dark;
+    --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+
+    --bg: #0b0d12;
+    --surface: #12151b;
+    --surface-2: #171b23;
+    --surface-3: #1d222c;
+    --border: rgba(255,255,255,0.07);
+    --border-strong: rgba(255,255,255,0.15);
+
+    --text-1: #edeff2;
+    --text-2: #9aa3b2;
+    --text-3: #656e7c;
+    --text-4: #3d434d;
+
+    /* audio family — warm */
+    --warm-1: #f2a45c;      /* media */
+    --warm-1-soft: rgba(242,164,92,0.15);
+    --warm-2: #ff8f68;      /* volume */
+    --warm-2-soft: rgba(255,143,104,0.15);
+
+    /* system family — cool */
+    --cool-1: #7fd4ea;      /* brightness */
+    --cool-1-soft: rgba(127,212,234,0.15);
+    --cool-2: #8cb2e8;      /* system */
+    --cool-2-soft: rgba(140,178,232,0.15);
+    --cool-3: #6bdfc4;      /* sleep timer */
+    --cool-3-soft: rgba(107,223,196,0.15);
+
+    --neutral: #757e8c;
+    --amber: #f0c05c;
+    --amber-soft: rgba(240,192,92,0.14);
+    --red: #ef6f6c;
+    --red-soft: rgba(239,111,108,0.14);
+    --green: #6bcf9a;
+
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-sm: 10px;
+    --radius-pill: 999px;
+
+    --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-press: cubic-bezier(0.2, 0, 0, 1);
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+    --z-scrim: 20;
+    --z-setup: 30;
+    --z-switcher: 60;
+    --z-toast: 70;
+  }
+
+  /* ============================================================
+     RESET
+     ============================================================ */
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  body {
+    background: #05060a;
+    color: var(--text-1);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  input { font: inherit; color: inherit; }
+  svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .icon { width: 18px; height: 18px; flex-shrink: 0; }
+  .tabular, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  h1, h2, h3, p { margin: 0; }
+  h1, h2, h3 { text-wrap: balance; }
+  ::selection { background: var(--warm-1-soft); }
+
+  :focus { outline: none; }
+  :focus-visible { outline: 2px solid var(--text-1); outline-offset: 2px; border-radius: 4px; }
+
+  /* ============================================================
+     APP SHELL
+     ============================================================ */
+  .stage {
+    height: 100dvh;
+    width: 100%;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% -10%, rgba(242,164,92,0.05), transparent 60%),
+      var(--bg);
+  }
+  .app {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+    height: 100dvh;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  @media (min-width: 461px) {
+    .app { box-shadow: 0 0 0 1px var(--border), 0 40px 100px -30px rgba(0,0,0,0.8); }
+  }
+
+  /* ============================================================
+     TOPBAR
+     ============================================================ */
+  .topbar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: max(14px, env(safe-area-inset-top)) 20px 12px;
+    z-index: 5;
+    transition: opacity 260ms var(--ease-out), transform 260ms var(--ease-out);
+  }
+  .topbar__brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    color: var(--text-2);
+    text-transform: uppercase;
+  }
+  .topbar__dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 3px rgba(107,207,154,0.16);
+    transition: background 300ms var(--ease-out), box-shadow 300ms var(--ease-out);
+  }
+  .topbar__dot.is-offline { background: var(--red); box-shadow: 0 0 0 3px rgba(239,111,108,0.16); animation: none; }
+  .topbar__dot.is-update { background: var(--amber); box-shadow: 0 0 0 3px rgba(240,192,92,0.16); }
+  .topbar__dot.is-online { animation: dotPulse 2.4s ease-in-out infinite; }
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(107,207,154,0.16); }
+    50% { box-shadow: 0 0 0 5px rgba(107,207,154,0.08); }
+  }
+  .topbar__status { color: var(--text-2); font-family: var(--font-sans); text-transform: none; letter-spacing: 0; font-size: 12.5px; }
+  .topbar__clock {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-3);
+    letter-spacing: 0.02em;
+  }
+  .app[data-state="setup"] .topbar { opacity: 0; transform: translateY(-6px); pointer-events: none; }
+
+  /* ============================================================
+     BOARD / GRID
+     ============================================================ */
+  .board {
+    position: relative;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 16px calc(96px + env(safe-area-inset-bottom));
+    scrollbar-width: none;
+  }
+  .board::-webkit-scrollbar { display: none; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    align-items: start;
+  }
+
+  /* ---- update banner ---- */
+  .update-banner {
+    grid-column: 1 / -1;
+    display: none;
+    background: linear-gradient(180deg, var(--surface-3), var(--surface-2));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    margin-bottom: 2px;
+    box-shadow: 0 0 0 1px rgba(240,192,92,0.05) inset;
+  }
+  .app[data-state="update"] .update-banner { display: block; }
+  .update-banner.is-leaving { animation: bannerLeave 380ms var(--ease-out) forwards; }
+  @keyframes bannerLeave { to { opacity: 0; transform: translateY(-6px); } }
+
+  .update-banner__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .update-banner__icon {
+    width: 30px; height: 30px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    background: var(--amber-soft); color: var(--amber); flex: none;
+  }
+  .update-banner__text { flex: 1; min-width: 0; }
+  .update-banner__title { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
+  .update-banner__ver { font-family: var(--font-mono); font-size: 11.5px; color: var(--amber); margin-left: 6px; }
+  .update-banner__sub { font-size: 12px; color: var(--text-2); margin-top: 1px; }
+  .update-banner__action {
+    flex: none;
+    height: 34px;
+    padding: 0 14px;
+    border-radius: var(--radius-pill);
+    background: var(--amber);
+    color: #201603;
+    font-size: 12.5px;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 150ms var(--ease-press), opacity 200ms var(--ease-out);
+    min-width: 96px;
+    justify-content: center;
+  }
+  .update-banner__action:active { transform: scale(0.96); }
+  .update-banner__action[disabled] { opacity: 0.85; cursor: default; }
+  .update-banner__progress {
+    grid-column: 1/-1;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+    margin-top: 10px;
+    overflow: hidden;
+    display: none;
+  }
+  .update-banner.is-downloading .update-banner__progress { display: block; }
+  .update-banner__progress-fill {
+    height: 100%; width: 0%;
+    background: var(--amber);
+    border-radius: var(--radius-pill);
+    transition: width 120ms linear;
+  }
+
+  /* ---- teaser (browser tabs) ---- */
+  .tile--teaser {
+    grid-column: 1 / -1;
+    opacity: 0.62;
+    cursor: default;
+  }
+  .tile--teaser .tile-head { cursor: default; }
+  .tile--teaser.shake { animation: shakeNo 420ms var(--ease-out); }
+  @keyframes shakeNo {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-5px); }
+    40% { transform: translateX(4px); }
+    60% { transform: translateX(-3px); }
+    80% { transform: translateX(2px); }
+  }
+  .tile--teaser .tile-value {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--neutral);
+    background: rgba(255,255,255,0.05);
+    padding: 4px 9px;
+    border-radius: var(--radius-pill);
+  }
+  .tile--teaser .tile-rest { padding-top: 2px; }
+  .tile--teaser .tile-sub { color: var(--text-3); }
+
+  /* ============================================================
+     TILE — base
+     ============================================================ */
+  .tile {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: opacity 320ms var(--ease-out), transform 320ms var(--ease-out), filter 320ms var(--ease-out), grid-column 0ms;
+  }
+  .tile--wide { grid-column: 1 / -1; }
+  .tile.is-expanded { grid-column: 1 / -1; }
+  .tile.just-expanded { animation: tilePop 420ms var(--ease-out); }
+  @keyframes tilePop {
+    0% { transform: scale(0.985); }
+    55% { transform: scale(1.006); }
+    100% { transform: scale(1); }
+  }
+  .grid.has-expanded .tile:not(.is-expanded):not(.tile--teaser) {
+    opacity: 0.4;
+    transform: scale(0.965);
+    filter: saturate(0.55);
+  }
+  .grid.has-expanded .tile--teaser { opacity: 0.3; transform: scale(0.98); }
+
+  .tile-head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 14px;
+    text-align: left;
+  }
+  .tile-icon {
+    width: 34px; height: 34px; border-radius: 11px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--tile-soft, rgba(255,255,255,0.06));
+    color: var(--tile-accent, var(--text-2));
+    flex: none;
+    transition: transform 200ms var(--ease-press);
+  }
+  .tile-head:active .tile-icon { transform: scale(0.92); }
+  .tile-headtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .tile-label { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
+  .tile-sub { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile-value {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--tile-accent, var(--text-2));
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  .tile-chev {
+    flex: none;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-3);
+    transition: transform 380ms var(--ease-spring);
+  }
+  .tile.is-expanded .tile-chev { transform: rotate(180deg); }
+
+  .tile-rest {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 360ms var(--ease-spring), opacity 220ms var(--ease-press);
+    opacity: 1;
+  }
+  .tile-rest > div { overflow: hidden; min-height: 0; }
+  .tile.is-expanded .tile-rest { grid-template-rows: 0fr; opacity: 0; }
+
+  .tile-expand {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 420ms var(--ease-spring);
+  }
+  .tile-expand > div { overflow: hidden; min-height: 0; }
+  .tile.is-expanded .tile-expand { grid-template-rows: 1fr; }
+  .tile-expand-pad { padding: 0 16px 16px; }
+
+  /* generic small control button */
+  .ctrl-btn {
+    min-height: 44px;
+    min-width: 44px;
+    border-radius: var(--radius-md);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 140ms var(--ease-press), background 160ms var(--ease-out), border-color 160ms var(--ease-out);
+  }
+  .ctrl-btn:hover { background: var(--surface-3); }
+  .ctrl-btn:active { transform: scale(0.96); }
+  .ctrl-btn--primary { background: var(--tile-accent, var(--text-1)); color: #10131a; border-color: transparent; }
+  .ctrl-btn--primary:hover { filter: brightness(1.06); }
+  .ctrl-btn--ghost { background: transparent; }
+  .ctrl-btn--pill { border-radius: var(--radius-pill); padding: 0 16px; min-width: 0; height: 40px; font-size: 13px; font-weight: 500; color: var(--text-2); }
+  .ctrl-btn--pill.is-selected { background: var(--tile-soft); border-color: transparent; color: var(--tile-accent); font-weight: 600; }
+  .ctrl-row { display: flex; gap: 8px; }
+  .ctrl-row--wrap { flex-wrap: wrap; }
+
+  /* ============================================================
+     MEDIA TILE
+     ============================================================ */
+  .tile--media { --tile-accent: var(--warm-1); --tile-soft: var(--warm-1-soft); }
+  .media-rest {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 14px 14px;
+  }
+  .media-art {
+    width: 44px; height: 44px; border-radius: 12px; flex: none;
+    background:
+      radial-gradient(120% 120% at 25% 20%, #ffc98a, transparent 55%),
+      radial-gradient(120% 120% at 80% 85%, #ff8f68, transparent 55%),
+      linear-gradient(135deg, #6b4726, #3a2716);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
+    position: relative;
+    overflow: hidden;
+  }
+  .app[data-playing="true"] .media-art::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.14), transparent 60%);
+    animation: artBreathe 3.2s ease-in-out infinite;
+  }
+  @keyframes artBreathe { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+  .media-meta { flex: 1; min-width: 0; }
+  .media-title { font-size: 13.5px; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .media-artist { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+  .media-transport-mini { display: flex; align-items: center; gap: 2px; flex: none; }
+  .transport-btn-mini {
+    width: 32px; height: 32px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-2);
+    transition: transform 140ms var(--ease-press), color 160ms var(--ease-out), background 160ms var(--ease-out);
+  }
+  .transport-btn-mini:hover { background: var(--surface-2); color: var(--text-1); }
+  .transport-btn-mini:active { transform: scale(0.9); }
+  .transport-btn-mini--play { color: var(--warm-1); }
+
+  .media-expand-art {
+    width: 100%;
+    aspect-ratio: 16/8;
+    border-radius: var(--radius-md);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 14px;
+    background:
+      radial-gradient(120% 160% at 20% 10%, #ffc98a, transparent 55%),
+      radial-gradient(120% 160% at 85% 90%, #ff8f68, transparent 55%),
+      linear-gradient(135deg, #5c3d20, #2c1c10);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+  }
+  .app[data-playing="true"] .media-expand-art::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.16), transparent 62%);
+    animation: artBreathe 3.2s ease-in-out infinite;
+  }
+  .media-expand-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .media-expand-title { font-size: 17px; font-weight: 600; color: var(--text-1); }
+  .media-expand-artist { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+  .media-expand-app {
+    flex: none; font-size: 11px; color: var(--text-3); background: var(--surface-2);
+    padding: 4px 9px; border-radius: var(--radius-pill); font-weight: 500;
+  }
+  .media-scrub { margin-bottom: 16px; }
+  .media-scrub-track { height: 4px; border-radius: var(--radius-pill); background: var(--surface-3); position: relative; overflow: hidden; }
+  .media-scrub-fill { height: 100%; width: 30%; background: var(--warm-1); border-radius: var(--radius-pill); transition: width 220ms linear; }
+  .media-scrub-times { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--text-3); }
+  .media-transport { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .transport-btn {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-2); background: var(--surface-2);
+    transition: transform 140ms var(--ease-press), background 160ms var(--ease-out);
+  }
+  .transport-btn:active { transform: scale(0.92); }
+  .transport-btn--play {
+    width: 56px; height: 56px; background: var(--warm-1); color: #201205;
+  }
+  .transport-btn--play:active { transform: scale(0.94); }
+
+  /* ============================================================
+     VOLUME / BRIGHTNESS TILE
+     ============================================================ */
+  .tile--volume { --tile-accent: var(--warm-2); --tile-soft: var(--warm-2-soft); }
+  .tile--brightness { --tile-accent: var(--cool-1); --tile-soft: var(--cool-1-soft); }
+
+  .level-rest { padding: 0 14px 14px; }
+  .level-bar { height: 6px; border-radius: var(--radius-pill); background: var(--surface-3); overflow: hidden; }
+  .level-bar-fill { height: 100%; border-radius: var(--radius-pill); background: var(--tile-accent); transition: width 200ms var(--ease-out); }
+  .level-rest.is-muted .level-bar-fill { background: var(--text-4); }
+
+  .level-readout { text-align: center; margin-bottom: 14px; }
+  .level-readout-num { font-family: var(--font-mono); font-size: 40px; font-weight: 500; color: var(--text-1); line-height: 1; }
+  .level-readout-unit { font-family: var(--font-mono); font-size: 16px; color: var(--text-3); margin-left: 2px; }
+  .level-readout-label { font-size: 11.5px; color: var(--text-3); margin-top: 4px; letter-spacing: 0.02em; }
+
+  .slider { padding: 14px 2px; margin-bottom: 4px; touch-action: none; }
+  .slider-track { position: relative; height: 6px; border-radius: var(--radius-pill); background: var(--surface-3); cursor: pointer; }
+  .slider-fill { position: absolute; inset: 0 auto 0 0; height: 100%; width: 50%; border-radius: var(--radius-pill); background: var(--tile-accent); }
+  .slider-thumb {
+    position: absolute; top: 50%; left: 50%;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--text-1);
+    box-shadow: 0 0 0 3px var(--bg), 0 2px 8px rgba(0,0,0,0.5);
+    transform: translate(-50%, -50%);
+    transition: box-shadow 160ms var(--ease-out);
+  }
+  .slider:active .slider-thumb, .slider:focus-visible .slider-thumb { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--tile-soft); }
+
+  .steps-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .steps-row .ctrl-btn { flex: 1; }
+  .steps-row .ctrl-btn--mute { flex: none; width: 44px; }
+  .presets-row { display: flex; gap: 6px; }
+  .presets-row .ctrl-btn--pill { flex: 1; padding: 0 6px; }
+
+  /* ============================================================
+     SYSTEM TILE
+     ============================================================ */
+  .tile--system { --tile-accent: var(--cool-2); --tile-soft: var(--cool-2-soft); }
+  .system-rest { padding: 0 14px 14px; display: flex; gap: 8px; }
+  .system-pill {
+    flex: 1; display: flex; align-items: center; gap: 6px;
+    font-size: 11.5px; color: var(--text-3);
+    background: var(--surface-2); border-radius: var(--radius-sm);
+    padding: 7px 9px;
+  }
+  .system-pill .icon { width: 13px; height: 13px; color: var(--text-3); }
+  .system-actions { display: flex; flex-direction: column; gap: 8px; }
+  .system-action {
+    width: 100%; min-height: 52px; border-radius: var(--radius-md);
+    background: var(--surface-2); border: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px; padding: 0 14px;
+    text-align: left;
+    transition: transform 140ms var(--ease-press), background 200ms var(--ease-out), border-color 200ms var(--ease-out);
+    position: relative;
+    overflow: hidden;
+  }
+  .system-action:active { transform: scale(0.98); }
+  .system-action__icon {
+    width: 34px; height: 34px; border-radius: 10px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--tile-soft); color: var(--tile-accent);
+  }
+  .system-action__text { flex: 1; min-width: 0; }
+  .system-action__label { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
+  .system-action__sub { font-size: 11.5px; color: var(--text-3); margin-top: 1px; }
+  .system-action--confirm .system-action__icon { background: var(--red-soft); color: var(--red); }
+  .system-action--confirm .system-action__label { color: var(--red); }
+  .system-action__timer-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--red); width: 100%; transform-origin: left; }
+  .system-action--confirm .system-action__timer-bar { animation: confirmShrink 3000ms linear forwards; }
+  @keyframes confirmShrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+  .system-action--flash .system-action__icon { background: var(--green); color: #0c1a11; }
+
+  /* ============================================================
+     SLEEP TIMER TILE
+     ============================================================ */
+  .tile--timer { --tile-accent: var(--cool-3); --tile-soft: var(--cool-3-soft); }
+  .tile--timer.is-armed .tile-icon { animation: dotPulse 2.4s ease-in-out infinite; }
+  .timer-rest { padding: 0 14px 14px; }
+  .timer-rest-hint { font-size: 11.5px; color: var(--text-3); }
+
+  .timer-setup { display: flex; flex-direction: column; gap: 10px; }
+  .timer-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+  .timer-presets .ctrl-btn--pill { flex: 1; min-width: 58px; }
+
+  .timer-armed { display: none; flex-direction: column; align-items: center; text-align: center; }
+  .tile--timer.is-armed .timer-setup { display: none; }
+  .tile--timer.is-armed .timer-armed { display: flex; }
+
+  .timer-ring-wrap { position: relative; width: 132px; height: 132px; margin-bottom: 10px; }
+  .timer-ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .timer-ring-track { fill: none; stroke: var(--surface-3); stroke-width: 5; }
+  .timer-ring-fill { fill: none; stroke: var(--cool-3); stroke-width: 5; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+  .timer-ring-inner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .timer-countdown { font-family: var(--font-mono); font-size: 28px; font-weight: 500; color: var(--text-1); }
+  .timer-countdown-label { font-size: 10.5px; color: var(--text-3); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; }
+  .tile--timer.is-fading .timer-ring-fill { stroke: var(--amber); }
+  .tile--timer.is-fading .timer-countdown { color: var(--amber); }
+  .timer-fade-note {
+    font-size: 12px; color: var(--text-2); margin-bottom: 14px; max-width: 220px;
+  }
+  .tile--timer.is-fading .timer-fade-note { color: var(--amber); }
+  .timer-cancel { width: 100%; }
+
+  /* ============================================================
+     SETUP SCREEN
+     ============================================================ */
+  .setup-screen {
+    position: absolute; inset: 0; z-index: var(--z-setup);
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 24px 24px calc(24px + env(safe-area-inset-bottom));
+    background: var(--bg);
+    opacity: 0; pointer-events: none;
+    transform: translateY(6px);
+    transition: opacity 320ms var(--ease-out), transform 320ms var(--ease-out);
+  }
+  .app[data-state="setup"] .setup-screen { opacity: 1; pointer-events: auto; transform: translateY(0); }
+
+  .setup-mark { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+  .setup-mark__glyph {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: var(--warm-1-soft); color: var(--warm-1);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .setup-mark__text { font-family: var(--font-mono); font-size: 14px; letter-spacing: 0.06em; color: var(--text-2); text-transform: uppercase; }
+
+  .setup-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 20px;
+  }
+  .setup-card h1 { font-size: 19px; font-weight: 600; margin-bottom: 4px; }
+  .setup-card p.sub { font-size: 13px; color: var(--text-2); margin-bottom: 20px; }
+  .field { margin-bottom: 14px; animation: fieldIn 460ms var(--ease-spring) backwards; }
+  .field:nth-child(2) { animation-delay: 40ms; }
+  .field:nth-child(3) { animation-delay: 100ms; }
+  @keyframes fieldIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .field label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; font-weight: 500; }
+  .field-input-wrap { position: relative; display: flex; align-items: center; }
+  .field input {
+    width: 100%; height: 46px; border-radius: var(--radius-md);
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 0 42px 0 14px; font-size: 14px; color: var(--text-1);
+    transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+  }
+  .field input::placeholder { color: var(--text-3); }
+  .field input:focus { border-color: var(--border-strong); box-shadow: 0 0 0 3px rgba(255,255,255,0.05); }
+  .field-toggle {
+    position: absolute; right: 6px; width: 32px; height: 32px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center; color: var(--text-3);
+  }
+  .field-toggle:hover { color: var(--text-1); background: var(--surface-3); }
+
+  .setup-primary {
+    width: 100%; min-height: 48px; border-radius: var(--radius-md);
+    background: var(--text-1); color: #0e1015; font-weight: 600; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 4px;
+    transition: transform 140ms var(--ease-press), opacity 200ms var(--ease-out), background 200ms var(--ease-out);
+  }
+  .setup-primary:active { transform: scale(0.98); }
+  .setup-primary:disabled { opacity: 0.35; cursor: default; }
+  .setup-primary.is-success { background: var(--green); }
+
+  .setup-spinner {
+    width: 15px; height: 15px; border-radius: 50%;
+    border: 2px solid rgba(0,0,0,0.2); border-top-color: rgba(0,0,0,0.7);
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  .setup-primary.is-loading .setup-spinner { display: block; }
+  .setup-primary.is-loading .setup-primary__label::after { content: "Testing connection\2026"; }
+  .setup-primary.is-loading .setup-primary__label { font-size: 0; }
+  .setup-primary.is-loading .setup-primary__label::after { font-size: 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .setup-status {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 14px; font-size: 13px; color: var(--text-2);
+    opacity: 0; transform: translateY(4px);
+    transition: opacity 260ms var(--ease-out), transform 260ms var(--ease-out);
+  }
+  .setup-status.is-visible { opacity: 1; transform: translateY(0); }
+  .setup-status__icon {
+    width: 20px; height: 20px; border-radius: 50%; flex: none;
+    background: var(--green); color: #0c1a11;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .setup-status__icon .icon { width: 12px; height: 12px; stroke-width: 2.4; }
+
+  .setup-continue {
+    width: 100%; min-height: 48px; border-radius: var(--radius-md);
+    background: var(--warm-1); color: #201205; font-weight: 600; font-size: 14px;
+    margin-top: 12px; display: none;
+    align-items: center; justify-content: center; gap: 8px;
+    transition: transform 140ms var(--ease-press);
+    animation: fieldIn 420ms var(--ease-spring);
+  }
+  .setup-continue.is-visible { display: flex; }
+  .setup-continue:active { transform: scale(0.98); }
+
+  /* ============================================================
+     OFFLINE SCRIM
+     ============================================================ */
+  .offline-scrim {
+    position: absolute; inset: 0; top: 68px; z-index: var(--z-scrim);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    background: rgba(5,6,10,0.72);
+    backdrop-filter: blur(3px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 320ms var(--ease-out);
+  }
+  .app[data-state="offline"] .offline-scrim { opacity: 1; pointer-events: auto; }
+  .app[data-state="offline"] .board .grid { filter: grayscale(0.7) brightness(0.65); pointer-events: none; }
+
+  .offline-card {
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg); padding: 26px 22px; text-align: center;
+    max-width: 300px;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6);
+  }
+  .offline-card__icon {
+    width: 52px; height: 52px; border-radius: 50%; margin: 0 auto 16px;
+    background: var(--red-soft); color: var(--red);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .offline-card__icon .icon { width: 24px; height: 24px; }
+  .offline-card h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .offline-card p { font-size: 13px; color: var(--text-2); margin-bottom: 20px; }
+  .offline-retry {
+    width: 100%; min-height: 46px; border-radius: var(--radius-md);
+    background: var(--text-1); color: #0e1015; font-weight: 600; font-size: 13.5px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: transform 140ms var(--ease-press), background 200ms var(--ease-out);
+  }
+  .offline-retry:active { transform: scale(0.97); }
+  .offline-retry .icon { transition: transform 500ms var(--ease-spring); }
+  .offline-retry.is-loading .icon { animation: spinIcon 900ms linear infinite; }
+  .offline-retry.is-success { background: var(--green); }
+  @keyframes spinIcon { to { transform: rotate(360deg); } }
+  .offline-retry__label::after { content: "Retry"; }
+  .offline-retry.is-loading .offline-retry__label::after { content: "Retrying\2026"; }
+  .offline-retry.is-success .offline-retry__label::after { content: "Reconnected"; }
+
+  /* ============================================================
+     TOAST
+     ============================================================ */
+  .toast {
+    position: fixed; top: max(16px, env(safe-area-inset-top));
+    left: 50%; transform: translateX(-50%) translateY(-10px) scale(0.96);
+    z-index: var(--z-toast);
+    background: var(--surface-3); border: 1px solid var(--border-strong);
+    color: var(--text-1); font-size: 13px; font-weight: 500;
+    padding: 10px 16px; border-radius: var(--radius-pill);
+    box-shadow: 0 12px 30px -10px rgba(0,0,0,0.6);
+    opacity: 0; pointer-events: none;
+    transition: opacity 300ms var(--ease-out), transform 300ms var(--ease-out);
+    display: flex; align-items: center; gap: 8px;
+    white-space: nowrap;
+  }
+  .toast.is-visible { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  .toast__icon { width: 16px; height: 16px; color: var(--green); }
+
+  /* ============================================================
+     STATE SWITCHER (mockup affordance — visually separate)
+     ============================================================ */
+  .state-switcher {
+    position: fixed;
+    left: 50%;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: var(--z-switcher);
+    display: flex;
+    gap: 3px;
+    padding: 4px;
+    border-radius: var(--radius-pill);
+    background: rgba(8,9,13,0.7);
+    backdrop-filter: blur(18px);
+    box-shadow: 0 10px 30px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+    max-width: calc(100vw - 20px);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .state-switcher::-webkit-scrollbar { display: none; }
+  .chip {
+    min-height: 32px;
+    padding: 0 13px;
+    border-radius: var(--radius-pill);
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    letter-spacing: 0.02em;
+    font-weight: 500;
+    color: rgba(237,239,242,0.45);
+    white-space: nowrap;
+    transition: color 200ms var(--ease-out), background 200ms var(--ease-out), transform 150ms var(--ease-press);
+  }
+  .chip:active { transform: scale(0.94); }
+  .chip.is-active { color: #0e1015; background: var(--text-1); font-weight: 600; }
+
+  /* ============================================================
+     REDUCED MOTION
+     ============================================================ */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- icon sprite -->
+<svg style="display:none" aria-hidden="true">
+  <defs>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 6.2v11.6l9.5-5.8z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="7.5" y="6" width="3" height="12" rx="1" fill="currentColor" stroke="none"/><rect x="13.5" y="6" width="3" height="12" rx="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><rect x="5.5" y="6" width="2" height="12" rx="1" fill="currentColor" stroke="none"/><path d="M18 6.5 10 12l8 5.5z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><rect x="16.5" y="6" width="2" height="12" rx="1" fill="currentColor" stroke="none"/><path d="M6 6.5 14 12l-8 5.5z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3l5-4v13l-5-4H4z" fill="currentColor" stroke="none"/><path d="M15.2 9.2a4 4 0 010 5.6"/><path d="M17.7 6.7a7.6 7.6 0 010 10.6"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5h3l5-4v13l-5-4H4z" fill="currentColor" stroke="none"/><path d="M15.5 15.5l4-4M19.5 15.5l-4-4"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.6"/><line x1="12" y1="2.5" x2="12" y2="5.2"/><line x1="12" y1="18.8" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="5.2" y2="12"/><line x1="18.8" y1="12" x2="21.5" y2="12"/><line x1="5" y1="5" x2="6.9" y2="6.9"/><line x1="17.1" y1="17.1" x2="19" y2="19"/><line x1="5" y1="19" x2="6.9" y2="17.1"/><line x1="17.1" y1="6.9" x2="19" y2="5"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="6.5" y="11" width="11" height="8.5" rx="2"/><path d="M9 11V8a3 3 0 016 0v3"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.3A7.6 7.6 0 019.7 4.5a8.2 8.2 0 108.8 12.8z"/></symbol>
+    <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="12.5" r="8"/><path d="M12 12.5V7.7"/><path d="M12 12.5l3.4 1.6"/><path d="M9.5 2.5h5"/></symbol>
+    <symbol id="i-tabs" viewBox="0 0 24 24"><rect x="3.2" y="5.2" width="14" height="13" rx="2.2"/><rect x="7.2" y="3.2" width="13.5" height="12.6" rx="2.2" fill="var(--surface,#12151b)"/></symbol>
+    <symbol id="i-offline" viewBox="0 0 24 24"><path d="M5.3 8.7a11 11 0 0113.4 0"/><path d="M8.2 12.3a6.6 6.6 0 017.6 0"/><circle cx="12" cy="16.6" r="1.15" fill="currentColor" stroke="none"/><line x1="3.5" y1="3.5" x2="20.5" y2="20.5"/></symbol>
+    <symbol id="i-retry" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 0113-5.1M19.5 12a7.5 7.5 0 01-13 5.1"/><path d="M17.2 3.8v3.7h-3.7M6.8 20.2v-3.7h3.7"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-update" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 15.5V8.5"/><path d="M8.7 11.7L12 8.5l3.3 3.2"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><circle cx="8.5" cy="18" r="2.3" fill="currentColor" stroke="none"/><path d="M10.8 18V5.6l7-1.5v10.9"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.2"/><line x1="12" y1="4.5" x2="12" y2="11"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/><line x1="3" y1="21" x2="21" y2="3"/></symbol>
+  </defs>
+</svg>
+
+<div class="stage">
+<div class="app" data-state="remote" data-playing="false" id="app">
+
+  <!-- ============================================================ TOPBAR ============================================================ -->
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="topbar__dot is-online" id="statusDot"></span>
+      <span>Panel</span>
+      <span class="topbar__status" id="statusText">&middot; Online</span>
+    </div>
+    <div class="topbar__clock tabular" id="clock">10:41 PM</div>
+  </header>
+
+  <!-- ============================================================ BOARD ============================================================ -->
+  <main class="board">
+    <div class="grid" id="grid">
+
+      <!-- ---------- update banner ---------- -->
+      <div class="update-banner" id="updateBanner">
+        <div class="update-banner__row">
+          <div class="update-banner__icon"><svg class="icon"><use href="#i-update"/></svg></div>
+          <div class="update-banner__text">
+            <div class="update-banner__title">Update available<span class="update-banner__ver mono">v1.4.0</span></div>
+            <div class="update-banner__sub" id="updateSub">Faster reconnects, refined tile animations.</div>
+          </div>
+          <button class="update-banner__action" id="updateAction">
+            <span id="updateActionLabel">Download</span>
+          </button>
+        </div>
+        <div class="update-banner__progress">
+          <div class="update-banner__progress-fill" id="updateProgressFill"></div>
+        </div>
+      </div>
+
+      <!-- ---------- MEDIA ---------- -->
+      <section class="tile tile--wide tile--media" data-tile="media" id="tileMedia">
+        <button class="tile-head" data-toggle aria-expanded="false" aria-controls="mediaBody">
+          <span class="tile-icon"><svg class="icon"><use href="#i-music"/></svg></span>
+          <span class="tile-headtext">
+            <span class="tile-label">Media</span>
+            <span class="tile-sub" id="mediaAppSub">Music &middot; Paused</span>
+          </span>
+          <span class="tile-chev"><svg class="icon"><use href="#i-chevron"/></svg></span>
+        </button>
+
+        <div class="tile-rest">
+          <div>
+            <div class="media-rest">
+              <div class="media-art"></div>
+              <div class="media-meta">
+                <div class="media-title" id="mediaTitleRest">Fourth of July</div>
+                <div class="media-artist" id="mediaArtistRest">Sufjan Stevens</div>
+              </div>
+              <div class="media-transport-mini">
+                <button class="transport-btn-mini" data-action="prev" aria-label="Previous track"><svg class="icon"><use href="#i-prev"/></svg></button>
+                <button class="transport-btn-mini transport-btn-mini--play" data-action="playpause" aria-label="Play or pause" id="miniPlayBtn"><svg class="icon" id="miniPlayIcon"><use href="#i-play"/></svg></button>
+                <button class="transport-btn-mini" data-action="next" aria-label="Next track"><svg class="icon"><use href="#i-next"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tile-expand" id="mediaBody">
+          <div>
+            <div class="tile-expand-pad">
+              <div class="media-expand-art"></div>
+              <div class="media-expand-head">
+                <div>
+                  <div class="media-expand-title" id="mediaTitleFull">Fourth of July</div>
+                  <div class="media-expand-artist" id="mediaArtistFull">Sufjan Stevens</div>
+                </div>
+                <span class="media-expand-app">Music</span>
+              </div>
+              <div class="media-scrub">
+                <div class="media-scrub-track"><div class="media-scrub-fill" id="scrubFill"></div></div>
+                <div class="media-scrub-times">
+                  <span class="tabular" id="scrubElapsed">1:14</span>
+                  <span class="tabular" id="scrubTotal">4:03</span>
+                </div>
+              </div>
+              <div class="media-transport">
+                <button class="transport-btn" data-action="prev" aria-label="Previous track"><svg class="icon"><use href="#i-prev"/></svg></button>
+                <button class="transport-btn transport-btn--play" data-action="playpause" aria-label="Play or pause" id="bigPlayBtn"><svg class="icon" id="bigPlayIcon"><use href="#i-play"/></svg></button>
+                <button class="transport-btn" data-action="next" aria-label="Next track"><svg class="icon"><use href="#i-next"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- VOLUME ---------- -->
+      <section class="tile tile--volume" data-tile="volume" id="tileVolume">
+        <button class="tile-head" data-toggle aria-expanded="false" aria-controls="volumeBody">
+          <span class="tile-icon"><svg class="icon" id="volHeadIcon"><use href="#i-volume"/></svg></span>
+          <span class="tile-headtext">
+            <span class="tile-label">Volume</span>
+            <span class="tile-sub">Output</span>
+          </span>
+          <span class="tile-value mono" id="volHeadValue">62%</span>
+          <span class="tile-chev"><svg class="icon"><use href="#i-chevron"/></svg></span>
+        </button>
+
+        <div class="tile-rest">
+          <div>
+            <div class="level-rest" id="volRestWrap">
+              <div class="level-bar"><div class="level-bar-fill" id="volRestFill" style="width:62%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tile-expand" id="volumeBody">
+          <div>
+            <div class="tile-expand-pad">
+              <div class="level-readout">
+                <span class="level-readout-num" id="volReadout">62</span><span class="level-readout-unit">%</span>
+                <div class="level-readout-label" id="volReadoutLabel">Output volume</div>
+              </div>
+              <div class="slider" data-slider="volume" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62">
+                <div class="slider-track">
+                  <div class="slider-fill" id="volSliderFill" style="width:62%"></div>
+                  <div class="slider-thumb" id="volSliderThumb" style="left:62%"></div>
+                </div>
+              </div>
+              <div class="steps-row">
+                <button class="ctrl-btn ctrl-btn--mute" data-action="vol-mute" aria-label="Mute"><svg class="icon" id="volMuteIcon"><use href="#i-volume"/></svg></button>
+                <button class="ctrl-btn" data-action="vol-down" aria-label="Volume down">&minus;5</button>
+                <button class="ctrl-btn" data-action="vol-up" aria-label="Volume up">+5</button>
+              </div>
+              <div class="presets-row">
+                <button class="ctrl-btn--pill" data-action="vol-preset" data-value="25">25</button>
+                <button class="ctrl-btn--pill" data-action="vol-preset" data-value="50">50</button>
+                <button class="ctrl-btn--pill" data-action="vol-preset" data-value="75">75</button>
+                <button class="ctrl-btn--pill" data-action="vol-preset" data-value="100">100</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- BRIGHTNESS ---------- -->
+      <section class="tile tile--brightness" data-tile="brightness" id="tileBrightness">
+        <button class="tile-head" data-toggle aria-expanded="false" aria-controls="brightnessBody">
+          <span class="tile-icon"><svg class="icon"><use href="#i-sun"/></svg></span>
+          <span class="tile-headtext">
+            <span class="tile-label">Brightness</span>
+            <span class="tile-sub">Display</span>
+          </span>
+          <span class="tile-value mono" id="briHeadValue">45%</span>
+          <span class="tile-chev"><svg class="icon"><use href="#i-chevron"/></svg></span>
+        </button>
+
+        <div class="tile-rest">
+          <div>
+            <div class="level-rest">
+              <div class="level-bar"><div class="level-bar-fill" id="briRestFill" style="width:45%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tile-expand" id="brightnessBody">
+          <div>
+            <div class="tile-expand-pad">
+              <div class="level-readout">
+                <span class="level-readout-num" id="briReadout">45</span><span class="level-readout-unit">%</span>
+                <div class="level-readout-label">Display brightness</div>
+              </div>
+              <div class="slider" data-slider="brightness" role="slider" tabindex="0" aria-label="Brightness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="45">
+                <div class="slider-track">
+                  <div class="slider-fill" id="briSliderFill" style="width:45%"></div>
+                  <div class="slider-thumb" id="briSliderThumb" style="left:45%"></div>
+                </div>
+              </div>
+              <div class="steps-row">
+                <button class="ctrl-btn" data-action="bri-down" aria-label="Brightness down" style="flex:1">&minus;10</button>
+                <button class="ctrl-btn" data-action="bri-up" aria-label="Brightness up" style="flex:1">+10</button>
+              </div>
+              <div class="presets-row">
+                <button class="ctrl-btn--pill" data-action="bri-preset" data-value="25">25</button>
+                <button class="ctrl-btn--pill" data-action="bri-preset" data-value="50">50</button>
+                <button class="ctrl-btn--pill" data-action="bri-preset" data-value="75">75</button>
+                <button class="ctrl-btn--pill" data-action="bri-preset" data-value="100">100</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- SYSTEM ---------- -->
+      <section class="tile tile--system" data-tile="system" id="tileSystem">
+        <button class="tile-head" data-toggle aria-expanded="false" aria-controls="systemBody">
+          <span class="tile-icon"><svg class="icon"><use href="#i-power"/></svg></span>
+          <span class="tile-headtext">
+            <span class="tile-label">System</span>
+            <span class="tile-sub">Tejas&rsquo;s MacBook Pro</span>
+          </span>
+          <span class="tile-value" id="sysHeadValue">Awake</span>
+          <span class="tile-chev"><svg class="icon"><use href="#i-chevron"/></svg></span>
+        </button>
+
+        <div class="tile-rest">
+          <div>
+            <div class="system-rest">
+              <span class="system-pill"><svg class="icon"><use href="#i-lock"/></svg>Unlocked</span>
+              <span class="system-pill"><svg class="icon"><use href="#i-power"/></svg>Awake</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tile-expand" id="systemBody">
+          <div>
+            <div class="tile-expand-pad">
+              <div class="system-actions">
+                <button class="system-action" data-action="lock" id="lockAction">
+                  <span class="system-action__icon"><svg class="icon"><use href="#i-lock"/></svg></span>
+                  <span class="system-action__text">
+                    <span class="system-action__label" id="lockLabel">Lock Mac</span>
+                    <span class="system-action__sub">Instant &middot; screen locks immediately</span>
+                  </span>
+                </button>
+                <button class="system-action" data-action="sleep" id="sleepAction">
+                  <span class="system-action__icon"><svg class="icon"><use href="#i-moon"/></svg></span>
+                  <span class="system-action__text">
+                    <span class="system-action__label" id="sleepLabel">Sleep Mac</span>
+                    <span class="system-action__sub" id="sleepSub">Tap to put your Mac to sleep</span>
+                  </span>
+                  <div class="system-action__timer-bar" id="sleepTimerBar"></div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- SLEEP TIMER ---------- -->
+      <section class="tile tile--timer" data-tile="timer" id="tileTimer">
+        <button class="tile-head" data-toggle aria-expanded="false" aria-controls="timerBody">
+          <span class="tile-icon"><svg class="icon"><use href="#i-timer"/></svg></span>
+          <span class="tile-headtext">
+            <span class="tile-label">Sleep Timer</span>
+            <span class="tile-sub" id="timerSub">Not set</span>
+          </span>
+          <span class="tile-value mono" id="timerHeadValue">Off</span>
+          <span class="tile-chev"><svg class="icon"><use href="#i-chevron"/></svg></span>
+        </button>
+
+        <div class="tile-rest">
+          <div>
+            <div class="timer-rest">
+              <span class="timer-rest-hint" id="timerRestHint">Tap to arm a countdown</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tile-expand" id="timerBody">
+          <div>
+            <div class="tile-expand-pad">
+
+              <div class="timer-setup">
+                <div class="timer-presets">
+                  <button class="ctrl-btn--pill" data-action="timer-arm" data-mins="15">15m</button>
+                  <button class="ctrl-btn--pill" data-action="timer-arm" data-mins="30">30m</button>
+                  <button class="ctrl-btn--pill" data-action="timer-arm" data-mins="45">45m</button>
+                  <button class="ctrl-btn--pill" data-action="timer-arm" data-mins="60">60m</button>
+                </div>
+              </div>
+
+              <div class="timer-armed">
+                <div class="timer-ring-wrap">
+                  <svg viewBox="0 0 132 132">
+                    <circle class="timer-ring-track" cx="66" cy="66" r="58"/>
+                    <circle class="timer-ring-fill" id="timerRingFill" cx="66" cy="66" r="58" stroke-dasharray="364" stroke-dashoffset="0"/>
+                  </svg>
+                  <div class="timer-ring-inner">
+                    <div class="timer-countdown tabular" id="timerCountdown">14:59</div>
+                    <div class="timer-countdown-label">Remaining</div>
+                  </div>
+                </div>
+                <p class="timer-fade-note" id="timerFadeNote">Fades volume smoothly over the last minute</p>
+                <button class="ctrl-btn ctrl-btn--pill timer-cancel" data-action="timer-cancel">Cancel timer</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- TEASER: BROWSER TABS ---------- -->
+      <section class="tile tile--teaser" data-tile="teaser" id="tileTeaser">
+        <button class="tile-head" data-toggle aria-disabled="true">
+          <span class="tile-icon"><svg class="icon"><use href="#i-tabs"/></svg></span>
+          <span class="tile-headtext">
+            <span class="tile-label">Browser tabs</span>
+            <span class="tile-sub">Jump between open tabs on your Mac</span>
+          </span>
+          <span class="tile-value">Coming in v0.2</span>
+        </button>
+        <div class="tile-rest"><div></div></div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ============================================================ SETUP SCREEN ============================================================ -->
+  <div class="setup-screen" id="setupScreen">
+    <div class="setup-mark">
+      <span class="setup-mark__glyph"><svg class="icon"><use href="#i-music"/></svg></span>
+      <span class="setup-mark__text">Panel</span>
+    </div>
+    <div class="setup-card">
+      <h1>Connect to your Mac</h1>
+      <p class="sub">Enter the address of the macremote server running on your Mac.</p>
+
+      <div class="field">
+        <label for="setupUrl">Server URL</label>
+        <div class="field-input-wrap">
+          <input type="text" id="setupUrl" placeholder="tejass-macbook.local:8787" autocomplete="off" spellcheck="false" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="setupToken">Access token</label>
+        <div class="field-input-wrap">
+          <input type="password" id="setupToken" placeholder="Paste your token" autocomplete="off" spellcheck="false" />
+          <button class="field-toggle" id="tokenToggle" aria-label="Show token" type="button"><svg class="icon"><use href="#i-eye"/></svg></button>
+        </div>
+      </div>
+
+      <button class="setup-primary" id="setupTestBtn" disabled>
+        <span class="setup-spinner"></span>
+        <span class="setup-primary__label" id="setupTestLabel">Test connection</span>
+      </button>
+
+      <div class="setup-status" id="setupStatus">
+        <span class="setup-status__icon"><svg class="icon"><use href="#i-check"/></svg></span>
+        <span id="setupStatusText">Connected to Tejas&rsquo;s MacBook Pro</span>
+      </div>
+
+      <button class="setup-continue" id="setupContinueBtn">Continue to Panel</button>
+    </div>
+  </div>
+
+  <!-- ============================================================ OFFLINE SCRIM ============================================================ -->
+  <div class="offline-scrim" id="offlineScrim">
+    <div class="offline-card">
+      <div class="offline-card__icon"><svg class="icon"><use href="#i-offline"/></svg></div>
+      <h2>Can&rsquo;t reach your Mac</h2>
+      <p>Last seen 2 minutes ago on Tejas&rsquo;s MacBook Pro. Check that it&rsquo;s awake and on the same network.</p>
+      <button class="offline-retry" id="offlineRetryBtn">
+        <svg class="icon"><use href="#i-retry"/></svg>
+        <span class="offline-retry__label"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- toast -->
+  <div class="toast" id="toast">
+    <svg class="icon toast__icon"><use href="#i-check"/></svg>
+    <span id="toastText">Locked</span>
+  </div>
+
+</div>
+</div>
+
+<!-- ============================================================ MOCKUP STATE SWITCHER ============================================================ -->
+<nav class="state-switcher" aria-label="Mockup state switcher">
+  <button class="chip" data-state="setup">Setup</button>
+  <button class="chip is-active" data-state="remote">Remote</button>
+  <button class="chip" data-state="timer">Timer</button>
+  <button class="chip" data-state="playing">Playing</button>
+  <button class="chip" data-state="offline">Offline</button>
+  <button class="chip" data-state="update">Update</button>
+</nav>
+
+<script>
+(function(){
+  "use strict";
+  var app = document.getElementById('app');
+  var grid = document.getElementById('grid');
+
+  /* ---------------------------------------------------------- helpers ---------------------------------------------------------- */
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function fmtClock(d) {
+    var h = d.getHours(), m = d.getMinutes();
+    var ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return h + ':' + (m < 10 ? '0' + m : m) + ' ' + ap;
+  }
+  function fmtMMSS(totalSeconds) {
+    var m = Math.floor(totalSeconds / 60), s = totalSeconds % 60;
+    return m + ':' + (s < 10 ? '0' + s : s);
+  }
+
+  /* ---------------------------------------------------------- toast ---------------------------------------------------------- */
+  var toastEl = document.getElementById('toast');
+  var toastText = document.getElementById('toastText');
+  var toastTimer = null;
+  function showToast(msg) {
+    toastText.textContent = msg;
+    toastEl.classList.add('is-visible');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('is-visible'); }, 2000);
+  }
+
+  /* ---------------------------------------------------------- clock ---------------------------------------------------------- */
+  var clockEl = document.getElementById('clock');
+  function tickClock() { clockEl.textContent = fmtClock(new Date()); }
+  tickClock();
+  setInterval(tickClock, 1000 * 15);
+
+  /* ---------------------------------------------------------- tile expand / collapse ---------------------------------------------------------- */
+  function popAnimate(tile) {
+    tile.classList.remove('just-expanded');
+    void tile.offsetWidth;
+    tile.classList.add('just-expanded');
+  }
+  function collapseTile(tile) {
+    tile.classList.remove('is-expanded');
+    var head = tile.querySelector('.tile-head');
+    if (head) head.setAttribute('aria-expanded', 'false');
+  }
+  function expandTile(tile) {
+    tile.classList.add('is-expanded');
+    var head = tile.querySelector('.tile-head');
+    if (head) head.setAttribute('aria-expanded', 'true');
+    popAnimate(tile);
+  }
+  function refreshHasExpanded() {
+    grid.classList.toggle('has-expanded', !!grid.querySelector('.tile.is-expanded'));
+  }
+  function collapseAll() {
+    Array.prototype.forEach.call(grid.querySelectorAll('.tile.is-expanded'), collapseTile);
+    refreshHasExpanded();
+  }
+  function toggleTile(tile) {
+    var wasExpanded = tile.classList.contains('is-expanded');
+    Array.prototype.forEach.call(grid.querySelectorAll('.tile.is-expanded'), function (t) {
+      if (t !== tile) collapseTile(t);
+    });
+    if (wasExpanded) collapseTile(tile); else expandTile(tile);
+    refreshHasExpanded();
+  }
+  function shakeTeaser(tile) {
+    tile.classList.remove('shake');
+    void tile.offsetWidth;
+    tile.classList.add('shake');
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.tile-head[data-toggle]'), function (btn) {
+    btn.addEventListener('click', function () {
+      var tile = btn.closest('.tile');
+      if (tile.classList.contains('tile--teaser')) { shakeTeaser(tile); return; }
+      toggleTile(tile);
+    });
+  });
+  document.getElementById('tileTeaser').addEventListener('animationend', function (e) {
+    if (e.animationName === 'shakeNo') this.classList.remove('shake');
+  });
+
+  /* stop mini transport clicks from toggling the media tile */
+  Array.prototype.forEach.call(document.querySelectorAll('.transport-btn-mini'), function (b) {
+    b.addEventListener('click', function (e) { e.stopPropagation(); });
+  });
+
+  /* ---------------------------------------------------------- generic slider ---------------------------------------------------------- */
+  function setupSlider(rootSel, opts) {
+    var root = document.querySelector(rootSel);
+    var track = root.querySelector('.slider-track');
+    function valueFromClientX(clientX) {
+      var rect = track.getBoundingClientRect();
+      var x = clamp(clientX - rect.left, 0, rect.width);
+      return Math.round((x / rect.width) * 100);
+    }
+    var dragging = false;
+    track.addEventListener('pointerdown', function (e) {
+      dragging = true;
+      try { track.setPointerCapture(e.pointerId); } catch (err) {}
+      opts.onChange(valueFromClientX(e.clientX));
+    });
+    track.addEventListener('pointermove', function (e) { if (dragging) opts.onChange(valueFromClientX(e.clientX)); });
+    ['pointerup', 'pointercancel'].forEach(function (ev) { track.addEventListener(ev, function () { dragging = false; }); });
+    root.addEventListener('keydown', function (e) {
+      var v = opts.getValue();
+      var step = e.shiftKey ? 10 : 1;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { opts.onChange(clamp(v + step, 0, 100)); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { opts.onChange(clamp(v - step, 0, 100)); }
+      else if (e.key === 'Home') { opts.onChange(0); }
+      else if (e.key === 'End') { opts.onChange(100); }
+      else return;
+      e.preventDefault();
+    });
+  }
+
+  /* ---------------------------------------------------------- volume ---------------------------------------------------------- */
+  var volume = { level: 62, muted: false };
+  var volRestFill = document.getElementById('volRestFill');
+  var volHeadValue = document.getElementById('volHeadValue');
+  var volReadout = document.getElementById('volReadout');
+  var volReadoutLabel = document.getElementById('volReadoutLabel');
+  var volSliderFill = document.getElementById('volSliderFill');
+  var volSliderThumb = document.getElementById('volSliderThumb');
+  var volSliderRoot = document.querySelector('[data-slider="volume"]');
+  var volMuteIcon = document.getElementById('volMuteIcon');
+  var volHeadIcon = document.getElementById('volHeadIcon');
+  var volRestWrap = document.getElementById('volRestWrap');
+
+  function renderVolume() {
+    var v = volume.level;
+    volRestFill.style.width = v + '%';
+    volHeadValue.textContent = volume.muted ? 'Muted' : v + '%';
+    volReadout.textContent = v;
+    volReadoutLabel.textContent = volume.muted ? 'Muted' : 'Output volume';
+    volSliderFill.style.width = v + '%';
+    volSliderThumb.style.left = v + '%';
+    volSliderRoot.setAttribute('aria-valuenow', v);
+    volRestWrap.classList.toggle('is-muted', volume.muted);
+    var useIcon = volume.muted ? '#i-mute' : '#i-volume';
+    volMuteIcon.querySelector('use').setAttribute('href', useIcon);
+    volHeadIcon.querySelector('use').setAttribute('href', useIcon);
+  }
+  function setVolume(v) {
+    volume.level = clamp(Math.round(v), 0, 100);
+    if (volume.muted && volume.level > 0) volume.muted = false;
+    renderVolume();
+  }
+  setupSlider('[data-slider="volume"]', { getValue: function () { return volume.level; }, onChange: setVolume });
+  document.querySelector('[data-action="vol-mute"]').addEventListener('click', function () {
+    volume.muted = !volume.muted;
+    renderVolume();
+  });
+  document.querySelector('[data-action="vol-down"]').addEventListener('click', function () { setVolume(volume.level - 5); });
+  document.querySelector('[data-action="vol-up"]').addEventListener('click', function () { setVolume(volume.level + 5); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-action="vol-preset"]'), function (b) {
+    b.addEventListener('click', function () { setVolume(parseInt(b.dataset.value, 10)); });
+  });
+  renderVolume();
+
+  /* ---------------------------------------------------------- brightness ---------------------------------------------------------- */
+  var brightness = { level: 45 };
+  var briRestFill = document.getElementById('briRestFill');
+  var briHeadValue = document.getElementById('briHeadValue');
+  var briReadout = document.getElementById('briReadout');
+  var briSliderFill = document.getElementById('briSliderFill');
+  var briSliderThumb = document.getElementById('briSliderThumb');
+  var briSliderRoot = document.querySelector('[data-slider="brightness"]');
+
+  function renderBrightness() {
+    var v = brightness.level;
+    briRestFill.style.width = v + '%';
+    briHeadValue.textContent = v + '%';
+    briReadout.textContent = v;
+    briSliderFill.style.width = v + '%';
+    briSliderThumb.style.left = v + '%';
+    briSliderRoot.setAttribute('aria-valuenow', v);
+  }
+  function setBrightness(v) { brightness.level = clamp(Math.round(v), 0, 100); renderBrightness(); }
+  setupSlider('[data-slider="brightness"]', { getValue: function () { return brightness.level; }, onChange: setBrightness });
+  document.querySelector('[data-action="bri-down"]').addEventListener('click', function () { setBrightness(brightness.level - 10); });
+  document.querySelector('[data-action="bri-up"]').addEventListener('click', function () { setBrightness(brightness.level + 10); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-action="bri-preset"]'), function (b) {
+    b.addEventListener('click', function () { setBrightness(parseInt(b.dataset.value, 10)); });
+  });
+  renderBrightness();
+
+  /* ---------------------------------------------------------- media / transport ---------------------------------------------------------- */
+  var media = { playing: false, elapsed: 74, duration: 243 };
+  var miniPlayIcon = document.getElementById('miniPlayIcon');
+  var bigPlayIcon = document.getElementById('bigPlayIcon');
+  var mediaAppSub = document.getElementById('mediaAppSub');
+  var scrubFill = document.getElementById('scrubFill');
+  var scrubElapsed = document.getElementById('scrubElapsed');
+  var scrubTotal = document.getElementById('scrubTotal');
+  var mediaProgressInterval = null;
+
+  function renderMedia() {
+    var useIcon = media.playing ? '#i-pause' : '#i-play';
+    miniPlayIcon.querySelector('use').setAttribute('href', useIcon);
+    bigPlayIcon.querySelector('use').setAttribute('href', useIcon);
+    mediaAppSub.textContent = 'Music · ' + (media.playing ? 'Playing' : 'Paused');
+    app.dataset.playing = media.playing ? 'true' : 'false';
+    scrubFill.style.width = clamp((media.elapsed / media.duration) * 100, 0, 100) + '%';
+    scrubElapsed.textContent = fmtMMSS(media.elapsed);
+    scrubTotal.textContent = fmtMMSS(media.duration);
+  }
+  function setPlaying(v) {
+    media.playing = v;
+    renderMedia();
+    clearInterval(mediaProgressInterval);
+    if (media.playing) {
+      mediaProgressInterval = setInterval(function () {
+        media.elapsed = (media.elapsed + 1) % media.duration;
+        renderMedia();
+      }, 1000);
+    }
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-action="playpause"]'), function (b) {
+    b.addEventListener('click', function () { setPlaying(!media.playing); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-action="prev"], [data-action="next"]'), function (b) {
+    b.addEventListener('click', function () {
+      media.elapsed = 0;
+      renderMedia();
+    });
+  });
+  renderMedia();
+
+  /* ---------------------------------------------------------- system: lock / sleep ---------------------------------------------------------- */
+  var lockAction = document.getElementById('lockAction');
+  var lockLabel = document.getElementById('lockLabel');
+  lockAction.addEventListener('click', function () {
+    if (lockAction.classList.contains('system-action--flash')) return;
+    lockAction.classList.add('system-action--flash');
+    lockLabel.textContent = 'Locked';
+    showToast('Mac locked');
+    setTimeout(function () {
+      lockAction.classList.remove('system-action--flash');
+      lockLabel.textContent = 'Lock Mac';
+    }, 1500);
+  });
+
+  var sleepAction = document.getElementById('sleepAction');
+  var sleepLabel = document.getElementById('sleepLabel');
+  var sleepSub = document.getElementById('sleepSub');
+  var sleepTimeout = null;
+  sleepAction.addEventListener('click', function () {
+    if (sleepAction.classList.contains('system-action--confirm')) {
+      clearTimeout(sleepTimeout);
+      sleepAction.classList.remove('system-action--confirm');
+      sleepLabel.textContent = 'Sleep Mac';
+      sleepSub.textContent = 'Going to sleep…';
+      showToast('Mac is going to sleep');
+      setTimeout(function () { sleepSub.textContent = 'Tap to put your Mac to sleep'; }, 1600);
+    } else {
+      sleepAction.classList.add('system-action--confirm');
+      sleepLabel.textContent = 'Confirm sleep?';
+      sleepSub.textContent = 'Tap again within 3s to confirm';
+      sleepTimeout = setTimeout(function () {
+        sleepAction.classList.remove('system-action--confirm');
+        sleepLabel.textContent = 'Sleep Mac';
+        sleepSub.textContent = 'Tap to put your Mac to sleep';
+      }, 3000);
+    }
+  });
+
+  /* ---------------------------------------------------------- sleep timer ---------------------------------------------------------- */
+  var tileTimer = document.getElementById('tileTimer');
+  var timerHeadValue = document.getElementById('timerHeadValue');
+  var timerSub = document.getElementById('timerSub');
+  var timerRestHint = document.getElementById('timerRestHint');
+  var timerCountdown = document.getElementById('timerCountdown');
+  var timerRingFill = document.getElementById('timerRingFill');
+  var timerFadeNote = document.getElementById('timerFadeNote');
+  var RING_CIRCUMFERENCE = 364;
+  var timerState = { armed: false, totalSeconds: 0, remaining: 0 };
+  var timerInterval = null;
+
+  function renderTimer() {
+    if (!timerState.armed) {
+      timerHeadValue.textContent = 'Off';
+      timerSub.textContent = 'Not set';
+      timerRestHint.textContent = 'Tap to arm a countdown';
+      tileTimer.classList.remove('is-armed', 'is-fading');
+      return;
+    }
+    tileTimer.classList.add('is-armed');
+    var mm = fmtMMSS(timerState.remaining);
+    timerHeadValue.textContent = mm;
+    timerSub.textContent = 'Armed · fading soon';
+    timerCountdown.textContent = mm;
+    var frac = timerState.remaining / timerState.totalSeconds;
+    timerRingFill.setAttribute('stroke-dashoffset', String(RING_CIRCUMFERENCE * (1 - frac)));
+    var isFading = timerState.remaining <= 60;
+    tileTimer.classList.toggle('is-fading', isFading);
+    timerFadeNote.textContent = isFading ? 'Fading out now…' : 'Fades volume smoothly over the last minute';
+  }
+  function armTimer(minutes, opts) {
+    clearInterval(timerInterval);
+    var seconds = opts && opts.demo ? minutes : minutes * 60;
+    timerState.armed = true;
+    timerState.totalSeconds = seconds;
+    timerState.remaining = seconds;
+    renderTimer();
+    timerInterval = setInterval(function () {
+      timerState.remaining -= 1;
+      if (timerState.remaining <= 0) {
+        if (opts && opts.demo) {
+          timerState.remaining = timerState.totalSeconds;
+        } else {
+          cancelTimer();
+          showToast('Sleep timer finished');
+          return;
+        }
+      }
+      renderTimer();
+    }, 1000);
+  }
+  function cancelTimer() {
+    clearInterval(timerInterval);
+    timerState.armed = false;
+    renderTimer();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-action="timer-arm"]'), function (b) {
+    b.addEventListener('click', function () {
+      armTimer(parseInt(b.dataset.mins, 10));
+      showToast(b.dataset.mins + ' min sleep timer set');
+    });
+  });
+  document.querySelector('[data-action="timer-cancel"]').addEventListener('click', function () {
+    cancelTimer();
+    showToast('Sleep timer cancelled');
+  });
+  renderTimer();
+
+  /* ---------------------------------------------------------- setup flow ---------------------------------------------------------- */
+  var setupUrl = document.getElementById('setupUrl');
+  var setupToken = document.getElementById('setupToken');
+  var setupTestBtn = document.getElementById('setupTestBtn');
+  var setupStatus = document.getElementById('setupStatus');
+  var setupContinueBtn = document.getElementById('setupContinueBtn');
+  var tokenToggle = document.getElementById('tokenToggle');
+
+  function updateSetupButtonState() {
+    var ready = setupUrl.value.trim().length > 0 && setupToken.value.trim().length > 0;
+    if (!setupTestBtn.classList.contains('is-loading') && !setupTestBtn.classList.contains('is-success')) {
+      setupTestBtn.disabled = !ready;
+    }
+  }
+  setupUrl.addEventListener('input', updateSetupButtonState);
+  setupToken.addEventListener('input', updateSetupButtonState);
+  tokenToggle.addEventListener('click', function () {
+    var showing = setupToken.type === 'text';
+    setupToken.type = showing ? 'password' : 'text';
+    tokenToggle.querySelector('use').setAttribute('href', showing ? '#i-eye' : '#i-eye-off');
+  });
+
+  function resetSetupForm() {
+    setupUrl.value = '';
+    setupToken.value = '';
+    setupToken.type = 'password';
+    tokenToggle.querySelector('use').setAttribute('href', '#i-eye');
+    setupTestBtn.className = 'setup-primary';
+    setupTestBtn.disabled = true;
+    document.getElementById('setupTestLabel').textContent = 'Test connection';
+    setupStatus.classList.remove('is-visible');
+    setupContinueBtn.classList.remove('is-visible');
+  }
+
+  setupTestBtn.addEventListener('click', function () {
+    if (setupTestBtn.disabled) return;
+    setupTestBtn.classList.add('is-loading');
+    setupTestBtn.disabled = true;
+    setTimeout(function () {
+      setupTestBtn.classList.remove('is-loading');
+      setupTestBtn.classList.add('is-success');
+      document.getElementById('setupTestLabel').textContent = 'Connected';
+      setupStatus.classList.add('is-visible');
+      setupContinueBtn.classList.add('is-visible');
+    }, 1200);
+  });
+  setupContinueBtn.addEventListener('click', function () { setAppState('remote'); });
+
+  /* ---------------------------------------------------------- offline flow ---------------------------------------------------------- */
+  var offlineRetryBtn = document.getElementById('offlineRetryBtn');
+  function resetOfflineCard() { offlineRetryBtn.className = 'offline-retry'; }
+  offlineRetryBtn.addEventListener('click', function () {
+    if (offlineRetryBtn.classList.contains('is-loading')) return;
+    offlineRetryBtn.classList.add('is-loading');
+    setTimeout(function () {
+      offlineRetryBtn.classList.remove('is-loading');
+      offlineRetryBtn.classList.add('is-success');
+      setTimeout(function () {
+        setAppState('remote');
+        showToast('Reconnected to your Mac');
+      }, 500);
+    }, 1400);
+  });
+
+  /* ---------------------------------------------------------- update flow ---------------------------------------------------------- */
+  var updateBanner = document.getElementById('updateBanner');
+  var updateAction = document.getElementById('updateAction');
+  var updateActionLabel = document.getElementById('updateActionLabel');
+  var updateProgressFill = document.getElementById('updateProgressFill');
+  var updateSub = document.getElementById('updateSub');
+  var updateStage = 'available';
+  var updateProgressTimer = null;
+
+  function resetUpdateBanner() {
+    clearInterval(updateProgressTimer);
+    updateStage = 'available';
+    updateBanner.classList.remove('is-downloading', 'is-leaving');
+    updateAction.disabled = false;
+    updateActionLabel.textContent = 'Download';
+    updateProgressFill.style.width = '0%';
+    updateSub.textContent = 'Faster reconnects, refined tile animations.';
+  }
+  updateAction.addEventListener('click', function () {
+    if (updateStage === 'available') {
+      updateStage = 'downloading';
+      updateBanner.classList.add('is-downloading');
+      updateAction.disabled = true;
+      var pct = 0;
+      updateProgressTimer = setInterval(function () {
+        pct += 4;
+        updateProgressFill.style.width = clamp(pct, 0, 100) + '%';
+        updateActionLabel.textContent = clamp(pct, 0, 100) + '%';
+        if (pct >= 100) {
+          clearInterval(updateProgressTimer);
+          updateStage = 'ready';
+          updateAction.disabled = false;
+          updateActionLabel.textContent = 'Install & Restart';
+          updateSub.textContent = 'Downloaded — ready to install.';
+        }
+      }, 90);
+    } else if (updateStage === 'ready') {
+      updateStage = 'installing';
+      updateAction.disabled = true;
+      updateActionLabel.textContent = 'Restarting…';
+      updateSub.textContent = 'Installing update, hang tight.';
+      setTimeout(function () {
+        updateBanner.classList.add('is-leaving');
+        showToast('Updated to v1.4.0');
+        setTimeout(resetUpdateBanner, 500);
+      }, 1400);
+    }
+  });
+
+  /* ---------------------------------------------------------- top-level state ---------------------------------------------------------- */
+  var statusDot = document.getElementById('statusDot');
+  var statusText = document.getElementById('statusText');
+
+  function setAppState(name) {
+    app.dataset.state = name;
+    Array.prototype.forEach.call(document.querySelectorAll('.state-switcher .chip'), function (c) {
+      c.classList.toggle('is-active', c.dataset.state === name);
+    });
+
+    statusDot.className = 'topbar__dot';
+    if (name === 'offline') { statusDot.classList.add('is-offline'); statusText.textContent = '· Offline'; }
+    else if (name === 'update') { statusDot.classList.add('is-update'); statusText.textContent = '· Update ready'; }
+    else { statusDot.classList.add('is-online'); statusText.textContent = '· Online'; }
+
+    collapseAll();
+
+    if (name === 'setup') { resetSetupForm(); }
+    if (name === 'offline') { resetOfflineCard(); }
+    if (name === 'update') { resetUpdateBanner(); }
+
+    if (name === 'timer') {
+      armTimer(68, { demo: true });
+      expandTile(tileTimer);
+      refreshHasExpanded();
+    } else if (!tileTimer.classList.contains('is-expanded') && timerState.armed && name !== 'remote') {
+      /* keep ticking in background */
+    }
+
+    if (name === 'playing') {
+      setPlaying(true);
+      var tileMedia = document.getElementById('tileMedia');
+      expandTile(tileMedia);
+      refreshHasExpanded();
+    }
+
+    if (name === 'remote') {
+      /* leave live values as user left them; just ensure nothing forced-armed from timer demo persists as expanded */
+    }
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.state-switcher .chip'), function (chip) {
+    chip.addEventListener('click', function () { setAppState(chip.dataset.state); });
+  });
+
+  /* initialize */
+  setAppState('remote');
+})();
+</script>
+
+</body>
+</html>

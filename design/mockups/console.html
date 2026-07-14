@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>macremote — Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0b;
+    --bg-frame:#050506;
+    --divider: rgba(255,255,255,.08);
+    --divider-soft: rgba(255,255,255,.05);
+    --text-primary: rgba(255,255,255,.94);
+    --text-secondary: rgba(255,255,255,.46);
+    --text-tertiary: rgba(255,255,255,.26);
+    --row-press: rgba(255,255,255,.045);
+    --row-fill-a: rgba(255,255,255,.075);
+    --row-fill-b: rgba(255,255,255,.045);
+    --accent: #f0a63a;
+    --accent-soft: rgba(240,166,58,.18);
+    --accent-fill-a: rgba(240,166,58,.24);
+    --accent-fill-b: rgba(240,166,58,.13);
+    --ease: cubic-bezier(.2,0,0,1);
+    --radius-chip: 10px;
+    color-scheme: dark;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--bg-frame);
+    font-family:'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    overscroll-behavior-y:none;
+  }
+  .tabular{ font-variant-numeric: tabular-nums; font-feature-settings:'tnum' 1, 'lnum' 1; }
+
+  ::selection{ background: var(--accent-soft); }
+
+  button{ font-family:inherit; color:inherit; }
+
+  :focus{ outline:none; }
+  :focus-visible{
+    outline: 2px solid rgba(255,255,255,.4);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* ---------- Frame (phone-like on wide viewports) ---------- */
+  .stage{
+    min-height: 100dvh;
+    display:flex;
+    align-items:stretch;
+    justify-content:center;
+  }
+  .frame{
+    position:relative;
+    width:100%;
+    max-width: 440px;
+    min-height:100dvh;
+    background:var(--bg);
+    color:var(--text-primary);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (min-width: 560px){
+    .stage{ padding: 28px 0; }
+    .frame{
+      min-height: calc(100dvh - 56px);
+      border-radius: 28px;
+      box-shadow:
+        0 1px 0 rgba(255,255,255,.06) inset,
+        0 30px 70px rgba(0,0,0,.55),
+        0 0 0 1px rgba(255,255,255,.06);
+    }
+  }
+
+  /* ---------- Identity bar ---------- */
+  .idbar{
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    gap:9px;
+    padding: max(16px, env(safe-area-inset-top)) 22px 14px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0);
+    transition: box-shadow 220ms var(--ease);
+    z-index:2;
+  }
+  .idbar.is-scrolled{ box-shadow: 0 1px 0 rgba(255,255,255,.07); }
+  .idbar-dot{
+    width:6px; height:6px; border-radius:50%;
+    background: var(--text-primary);
+    opacity:.85;
+    animation: breathe 2.6s ease-in-out infinite;
+  }
+  @keyframes breathe{ 0%,100%{ opacity:.85; transform:scale(1);} 50%{ opacity:.35; transform:scale(.72);} }
+  body[data-state="offline"] .idbar-dot{ opacity:.22; animation:none; transform:none; }
+  .idbar-name{
+    font-size:12px; font-weight:600; letter-spacing:.02em;
+    color: var(--text-primary);
+  }
+  .idbar-device{
+    margin-left:auto;
+    font-size:12px;
+    color: var(--text-tertiary);
+    max-width: 55%;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+
+  /* ---------- Ledger list ---------- */
+  .ledger{
+    flex:1;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+    padding-bottom: 128px;
+  }
+  .group{
+    max-height: 2000px;
+    opacity:1;
+    transition: max-height 320ms var(--ease), opacity 220ms var(--ease), margin 320ms var(--ease);
+    overflow:hidden;
+  }
+  .group.is-hidden{
+    max-height:0;
+    opacity:0;
+    transition: max-height 260ms var(--ease), opacity 160ms var(--ease);
+  }
+  .grouplabel{
+    font-size:10.5px;
+    font-weight:700;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color: var(--text-tertiary);
+    padding: 26px 22px 9px;
+  }
+  .group:first-child .grouplabel{ padding-top:6px; }
+
+  /* ---------- Row base ---------- */
+  .row{
+    position:relative;
+    display:flex;
+    align-items:center;
+    gap:14px;
+    width:100%;
+    min-height:56px;
+    padding: 15px 22px;
+    background:transparent;
+    border:none;
+    border-bottom:1px solid var(--divider);
+    text-align:left;
+    cursor:pointer;
+    color:inherit;
+    font-size:15px;
+    font-weight:500;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 140ms var(--ease), opacity 260ms var(--ease);
+  }
+  .row.is-hidden{
+    max-height:0; opacity:0; padding-top:0; padding-bottom:0;
+    min-height:0; border-color:transparent; overflow:hidden;
+    pointer-events:none;
+  }
+  .row:not(.row-slider):not(.no-press):active{ background: var(--row-press); }
+  .row.row-static{ cursor:default; }
+  .row.row-slider{ cursor: grab; }
+  .row.row-slider.dragging{ cursor: grabbing; }
+
+  .row-label{
+    flex:1;
+    min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    color: var(--text-primary);
+    transition: color 200ms var(--ease);
+  }
+  .row-value{
+    position:relative;
+    display:flex; align-items:center; gap:6px;
+    flex-shrink:0;
+    color: var(--text-primary);
+    font-weight:600;
+    transition: color 200ms var(--ease);
+  }
+  .row-value.dim{ color: var(--text-tertiary); font-weight:500; }
+  .row-sub .row-label{ color: var(--text-secondary); font-weight:400; font-size:13.5px; }
+  .row-sub{ min-height:44px; padding-top:0; padding-bottom:15px; cursor:default; }
+  .row-hint{ cursor:default; }
+
+  .icon{ display:block; color: currentColor; }
+  .icon-chevron{ color: var(--text-tertiary); }
+
+  /* chevron hint that reveals on hover for now-playing navigation */
+  .icon-hint{ opacity:0; transform: translateX(-3px); transition: opacity 180ms var(--ease), transform 180ms var(--ease); }
+  .row:hover .icon-hint{ opacity:1; transform:translateX(0); }
+
+  /* ---------- Slider rows (Volume / Brightness) ---------- */
+  .row-slider{
+    overflow:hidden;
+    touch-action: none;
+    user-select:none;
+  }
+  .row-fill{
+    position:absolute; inset:0;
+    width:0%;
+    background: linear-gradient(90deg, var(--row-fill-a), var(--row-fill-b));
+    transition: background 180ms var(--ease);
+    pointer-events:none;
+  }
+  .row-fill::after{
+    content:'';
+    position:absolute; top:0; right:0; bottom:0;
+    width:2px;
+    background: rgba(255,255,255,.22);
+    transition: background-color 180ms var(--ease);
+  }
+  .row-slider.dragging .row-fill{
+    background: linear-gradient(90deg, var(--accent-fill-a), var(--accent-fill-b));
+  }
+  .row-slider.dragging .row-fill::after{ background: var(--accent); }
+  .row-slider .row-label, .row-slider .row-value{ position:relative; z-index:1; }
+  .row-slider.dragging .row-value{ color: var(--accent); }
+  .row-slider .row-value{ min-width: 2.4ch; justify-content:flex-end; }
+
+  /* ---------- Row field (Setup inputs) ---------- */
+  .row-field{ cursor:default; }
+  .row-field:focus-within{ background: rgba(255,255,255,.035); }
+  .row-input{
+    background:transparent; border:none; outline:none;
+    color: var(--text-primary);
+    font: inherit; font-weight:600;
+    text-align:right;
+    width: 100%;
+    padding:0;
+  }
+  .row-input::placeholder{ color: var(--text-tertiary); }
+  .field-value{ flex:1; display:flex; justify-content:flex-end; min-width:0; }
+  .eye-btn{
+    flex-shrink:0;
+    width:28px; height:28px;
+    display:flex; align-items:center; justify-content:center;
+    background:transparent; border:none; color: var(--text-tertiary);
+    border-radius:8px;
+    transition: color 150ms var(--ease), background-color 150ms var(--ease), scale 150ms var(--ease);
+  }
+  .eye-btn:hover{ color: var(--text-primary); }
+  .eye-btn:active{ scale:.9; background: rgba(255,255,255,.06); }
+
+  /* ---------- Transport row ---------- */
+  .row-transport{ cursor:default; }
+  .transport-buttons{ display:flex; align-items:center; gap:6px; }
+  .tbtn{
+    width:40px; height:40px;
+    border-radius:50%;
+    background: rgba(255,255,255,.05);
+    border:none; color: var(--text-primary);
+    display:flex; align-items:center; justify-content:center;
+    transition: background-color 150ms var(--ease), scale 150ms var(--ease);
+  }
+  .tbtn svg{ width:16px; height:16px; }
+  .tbtn:hover{ background: rgba(255,255,255,.08); }
+  .tbtn:active{ scale:.94; background: rgba(255,255,255,.1); }
+  .tbtn-primary{ width:44px; height:44px; background: rgba(255,255,255,.09); }
+  .tbtn-primary:hover{ background: rgba(255,255,255,.13); }
+  .icon-swap{ position:relative; width:16px; height:16px; }
+  .icon-swap svg{
+    position:absolute; inset:0; width:16px; height:16px;
+    transition: opacity 260ms var(--ease), scale 260ms var(--ease), filter 260ms var(--ease);
+  }
+  .icon-swap svg.hide{ opacity:0; scale:.25; filter: blur(4px); }
+  .icon-swap svg.show{ opacity:1; scale:1; filter: blur(0); }
+
+  /* now playing live indicator */
+  .eq{ display:inline-flex; align-items:flex-end; gap:2px; height:12px; }
+  .eq i{ width:2.5px; border-radius:1px; background: var(--text-tertiary); height:40%; font-style:normal; transition: background-color 220ms var(--ease); }
+  .eq.is-playing i{ background: var(--accent); animation: eqbar 900ms ease-in-out infinite; }
+  .eq.is-playing i:nth-child(1){ animation-delay: 0ms; }
+  .eq.is-playing i:nth-child(2){ animation-delay: 150ms; }
+  .eq.is-playing i:nth-child(3){ animation-delay: 300ms; }
+  @keyframes eqbar{ 0%,100%{ height:28%; } 50%{ height:100%; } }
+  @media (prefers-reduced-motion: reduce){
+    .eq.is-playing i{ animation:none; height:75%; }
+    .idbar-dot{ animation:none; }
+  }
+
+  /* ---------- Sleep confirm ---------- */
+  .row-confirm{ align-items:flex-start; flex-wrap:wrap; }
+  .confirm-actions{
+    flex-basis:100%;
+    display:flex; gap:8px;
+    max-height:0; opacity:0;
+    overflow:hidden;
+    transition: max-height 260ms var(--ease), opacity 200ms var(--ease), margin-top 260ms var(--ease);
+  }
+  .row-confirm.confirming .confirm-actions{ max-height:52px; opacity:1; margin-top:12px; }
+  .cbtn{
+    flex:1;
+    min-height:40px;
+    border-radius:9px;
+    border:none;
+    font-size:13.5px; font-weight:600;
+    background: rgba(255,255,255,.06);
+    color: var(--text-primary);
+    transition: background-color 150ms var(--ease), scale 150ms var(--ease);
+  }
+  .cbtn:active{ scale:.96; }
+  .cbtn:hover{ background: rgba(255,255,255,.1); }
+  .cbtn-primary{ background: rgba(255,255,255,.14); }
+  .cbtn-primary:hover{ background: rgba(255,255,255,.18); }
+
+  /* ---------- Timer presets ---------- */
+  .row-presets{
+    display:flex; gap:8px;
+    padding: 0 22px;
+    max-height:0; opacity:0;
+    overflow:hidden;
+    border-bottom:1px solid transparent;
+    transition: max-height 260ms var(--ease), opacity 200ms var(--ease), padding 260ms var(--ease), border-color 260ms var(--ease);
+  }
+  .row-presets.open{
+    max-height:64px; opacity:1;
+    padding: 4px 22px 18px;
+    border-bottom-color: var(--divider);
+  }
+  .chip-preset{
+    flex:1;
+    min-height:40px;
+    border-radius:9px;
+    border:none;
+    background: rgba(255,255,255,.05);
+    color: var(--text-primary);
+    font-size:13.5px; font-weight:600;
+    transition: background-color 150ms var(--ease), scale 150ms var(--ease);
+  }
+  .chip-preset:hover{ background: rgba(255,255,255,.09); }
+  .chip-preset:active{ scale:.94; }
+
+  .row-hint{ min-height:auto; padding-top:0; padding-bottom:16px; cursor:default; }
+  .row-hint span{ font-size:12.5px; color: var(--text-tertiary); font-weight:400; }
+
+  /* timer countdown row */
+  .row-timer-fill{
+    position:absolute; inset:0; width:0%;
+    background: linear-gradient(90deg, var(--row-fill-a), var(--row-fill-b));
+    transition: width 900ms linear, background 400ms var(--ease);
+    pointer-events:none;
+  }
+  .row-timer-fill.fading{ background: linear-gradient(90deg, var(--accent-fill-a), var(--accent-fill-b)); }
+  #row-timer .row-label, #row-timer .row-value{ position:relative; z-index:1; }
+  #row-timer.is-fading .row-value{ color: var(--accent); }
+  .timer-cancel{
+    background:transparent; border:none; color: var(--text-secondary);
+    font-size:13.5px; font-weight:600; padding:6px 4px;
+    border-radius:6px;
+    transition: color 150ms var(--ease);
+  }
+  .timer-cancel:hover{ color: var(--text-primary); }
+  .timer-cancel:active{ opacity:.6; }
+
+  /* ---------- Update row / progress ---------- */
+  .row-update-fill{
+    position:absolute; inset:0; width:0%;
+    background: linear-gradient(90deg, var(--row-fill-a), var(--row-fill-b));
+    transition: width 160ms linear, background 300ms var(--ease);
+    pointer-events:none;
+  }
+  .row-update-fill.active{ background: linear-gradient(90deg, var(--accent-fill-a), var(--accent-fill-b)); }
+  #row-update .row-label, #row-update .row-value{ position:relative; z-index:1; }
+  #row-update.is-live .row-value{ color: var(--accent); }
+  .spinner{
+    width:15px; height:15px; border-radius:50%;
+    border:2px solid rgba(255,255,255,.18);
+    border-top-color: rgba(255,255,255,.7);
+    animation: spin .7s linear infinite;
+    flex-shrink:0;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  /* ---------- Offline blanking ---------- */
+  .row-value.blank-offline{ position:relative; }
+  body[data-state="offline"] .blank-offline > *{ visibility:hidden; }
+  body[data-state="offline"] .blank-offline::after{
+    content:'—';
+    visibility:visible;
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:flex-end;
+    color: var(--text-tertiary);
+    font-weight:600;
+  }
+  body[data-state="offline"] #grp-media .row,
+  body[data-state="offline"] #grp-system .row{
+    pointer-events:none;
+  }
+  body[data-state="offline"] #grp-media .row-label,
+  body[data-state="offline"] #grp-system .row-label{
+    color: var(--text-tertiary);
+  }
+  body[data-state="offline"] .row-fill{ width:0% !important; }
+  body[data-state="offline"] .tbtn{ background: rgba(255,255,255,.03); color: var(--text-tertiary); }
+
+  .status-online, .status-offline{ display:none; align-items:center; gap:6px; }
+  body:not([data-state="offline"]) .status-online{ display:flex; }
+  body[data-state="offline"] .status-offline{ display:flex; color: var(--text-secondary); }
+
+  /* ---------- Chip switcher (mockup affordance) ---------- */
+  .switcher{
+    position:fixed;
+    left:50%; bottom: max(16px, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    display:flex; gap:2px;
+    padding:4px;
+    background: rgba(18,18,20,.72);
+    backdrop-filter: blur(20px) saturate(1.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:14px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.05) inset;
+    z-index:10;
+  }
+  .chip{
+    padding:8px 11px;
+    font-size:11.5px; font-weight:600;
+    letter-spacing:.01em;
+    border:none; background:transparent;
+    color: var(--text-tertiary);
+    border-radius: var(--radius-chip);
+    transition: background-color 180ms var(--ease), color 180ms var(--ease), scale 150ms var(--ease);
+    white-space:nowrap;
+  }
+  .chip:hover{ color: var(--text-secondary); }
+  .chip.active{ color:#0a0a0b; background: var(--text-primary); }
+  .chip:active{ scale:.96; }
+
+  /* scrollbar tidy */
+  .ledger::-webkit-scrollbar{ width:0; height:0; }
+</style>
+</head>
+<body data-state="remote">
+
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7.5 5.2v13.6c0 .8.9 1.3 1.6.9l10.9-6.8c.6-.4.6-1.4 0-1.8L9.1 4.3c-.7-.4-1.6.1-1.6.9z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path fill="currentColor" d="M7 5.2c0-.5.4-.9.9-.9h2c.5 0 .9.4.9.9v13.6c0 .5-.4.9-.9.9h-2c-.5 0-.9-.4-.9-.9zM13.2 5.2c0-.5.4-.9.9-.9h2c.5 0 .9.4.9.9v13.6c0 .5-.4.9-.9.9h-2c-.5 0-.9-.4-.9-.9z"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path fill="currentColor" d="M6 5.2c0-.5.4-.9.9-.9h1c.5 0 .9.4.9.9v13.6c0 .5-.4.9-.9.9h-1c-.5 0-.9-.4-.9-.9zM19.4 5.6v12.8c0 .8-.9 1.3-1.6.9l-9.7-6.4c-.6-.4-.6-1.4 0-1.8l9.7-6.4c.7-.4 1.6.1 1.6.9z"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path fill="currentColor" d="M18 5.2c0-.5-.4-.9-.9-.9h-1c-.5 0-.9.4-.9.9v13.6c0 .5.4.9.9.9h1c.5 0 .9-.4.9-.9zM4.6 5.6v12.8c0 .8.9 1.3 1.6.9l9.7-6.4c.6-.4.6-1.4 0-1.8l-9.7-6.4c-.7-.4-1.6.1-1.6.9z"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.7c.5-.1 1-.2 1.4-.2 6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3.2 4M6.6 6.6C4 8.3 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.4 0 2.6-.3 3.7-.9"/><path d="M9.9 9.9a2.6 2.6 0 0 0 3.7 3.7"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11"/><path d="M7 10l5 5 5-5"/><path d="M4.5 19.5h15"/></symbol>
+  <symbol id="i-retry" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5A8 8 0 1 0 18.6 16.2"/><path d="M20 5.2v6.3h-6.3"/></symbol>
+</svg>
+
+<div class="stage">
+  <div class="frame">
+
+    <header class="idbar" id="idbar">
+      <span class="idbar-dot" aria-hidden="true"></span>
+      <span class="idbar-name">macremote</span>
+      <span class="idbar-device">
+        <span class="status-online">Office Mac mini</span>
+        <span class="status-offline">Unreachable</span>
+      </span>
+    </header>
+
+    <main class="ledger" id="ledger">
+
+      <!-- SETUP -->
+      <section class="group" id="grp-setup" data-show="setup">
+        <div class="grouplabel">Setup</div>
+
+        <div class="row row-field">
+          <label class="row-label" for="in-url">Server URL</label>
+          <span class="field-value">
+            <input id="in-url" class="row-input tabular" value="macmini.local:9090" inputmode="url" autocomplete="off" spellcheck="false">
+          </span>
+        </div>
+
+        <div class="row row-field">
+          <label class="row-label" for="in-token">Access token</label>
+          <span class="field-value">
+            <button class="eye-btn" id="btn-eye" type="button" aria-label="Show token">
+              <svg class="icon" id="icon-eye" width="16" height="16"><use href="#i-eye"></use></svg>
+            </button>
+            <input id="in-token" class="row-input tabular" type="password" value="a8f2-91cd-77e0" autocomplete="off" spellcheck="false">
+          </span>
+        </div>
+
+        <button class="row row-tap" id="row-test" type="button">
+          <span class="row-label" id="label-test">Test connection</span>
+          <span class="row-value" id="val-test">
+            <svg class="icon icon-chevron" width="15" height="15"><use href="#i-chevron"></use></svg>
+          </span>
+        </button>
+      </section>
+
+      <!-- CONNECTION -->
+      <section class="group" id="grp-connection" data-show="remote timer playing offline update">
+        <div class="grouplabel">Connection</div>
+
+        <div class="row row-static">
+          <span class="row-label">Server</span>
+          <span class="row-value">
+            <span class="status-online tabular">
+              office-mac.local
+              <svg class="icon" width="14" height="14"><use href="#i-check"></use></svg>
+            </span>
+            <span class="status-offline">Unreachable</span>
+          </span>
+        </div>
+
+        <button class="row row-tap" id="row-retry" type="button" data-show="offline">
+          <span class="row-label" id="label-retry">Retry connection</span>
+          <span class="row-value" id="val-retry">
+            <svg class="icon icon-chevron" width="15" height="15"><use href="#i-chevron"></use></svg>
+          </span>
+        </button>
+      </section>
+
+      <!-- UPDATE -->
+      <section class="group" id="grp-update" data-show="update">
+        <div class="grouplabel">Update</div>
+
+        <button class="row row-tap" id="row-update" type="button">
+          <div class="row-update-fill" id="fill-update"></div>
+          <span class="row-label" id="label-update">Update available &middot; 1.4.2 &rarr; 1.5.0</span>
+          <span class="row-value tabular" id="val-update">
+            <svg class="icon" width="15" height="15"><use href="#i-download"></use></svg>
+          </span>
+        </button>
+      </section>
+
+      <!-- MEDIA -->
+      <section class="group" id="grp-media" data-show="remote timer playing offline update">
+        <div class="grouplabel">Media</div>
+
+        <button class="row row-tap" id="row-nowplaying" type="button">
+          <span class="row-label" id="label-nowplaying">Now playing &middot; Frank Ocean &mdash; Nights</span>
+          <span class="row-value blank-offline">
+            <span class="eq is-playing" id="eq-indicator" aria-hidden="true"><i></i><i></i><i></i></span>
+            <svg class="icon icon-chevron icon-hint" width="14" height="14"><use href="#i-chevron"></use></svg>
+          </span>
+        </button>
+
+        <div class="row row-sub" id="row-artist" data-show="playing">
+          <span class="row-label" id="label-artist">Frank Ocean &middot; Music</span>
+          <span class="row-value dim tabular" id="val-scrub">1:42 / 3:58</span>
+        </div>
+        <div class="row row-slider row-sub" id="row-scrub" data-show="playing" style="min-height:20px; padding-top:0; padding-bottom:14px;" aria-hidden="true">
+          <div class="row-fill" id="fill-scrub"></div>
+        </div>
+
+        <div class="row row-transport" id="row-transport">
+          <span class="row-label">Playback</span>
+          <div class="transport-buttons">
+            <button class="tbtn" id="btn-prev" type="button" aria-label="Previous">
+              <svg width="16" height="16"><use href="#i-prev"></use></svg>
+            </button>
+            <button class="tbtn tbtn-primary" id="btn-playpause" type="button" aria-label="Play or pause">
+              <span class="icon-swap">
+                <svg id="icon-play" class="hide" width="16" height="16"><use href="#i-play"></use></svg>
+                <svg id="icon-pause" class="show" width="16" height="16"><use href="#i-pause"></use></svg>
+              </span>
+            </button>
+            <button class="tbtn" id="btn-next" type="button" aria-label="Next">
+              <svg width="16" height="16"><use href="#i-next"></use></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- SYSTEM -->
+      <section class="group" id="grp-system" data-show="remote timer playing offline update">
+        <div class="grouplabel">System</div>
+
+        <div class="row row-slider" id="row-volume" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62">
+          <div class="row-fill" id="fill-volume"></div>
+          <span class="row-label">Volume</span>
+          <span class="row-value blank-offline"><span id="val-volume" class="tabular">62</span></span>
+        </div>
+
+        <div class="row row-slider" id="row-brightness" role="slider" tabindex="0" aria-label="Brightness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="78">
+          <div class="row-fill" id="fill-brightness"></div>
+          <span class="row-label">Brightness</span>
+          <span class="row-value blank-offline"><span id="val-brightness" class="tabular">78</span></span>
+        </div>
+
+        <button class="row row-tap" id="row-lock" type="button">
+          <span class="row-label" id="label-lock">Lock</span>
+          <span class="row-value blank-offline" id="val-lock">
+            <svg class="icon icon-chevron" width="15" height="15"><use href="#i-chevron"></use></svg>
+          </span>
+        </button>
+
+        <div class="row row-tap row-confirm" id="row-sleep">
+          <span class="row-label" id="label-sleep">Sleep</span>
+          <span class="row-value blank-offline" id="val-sleep">
+            <svg class="icon icon-chevron" width="15" height="15"><use href="#i-chevron"></use></svg>
+          </span>
+          <div class="confirm-actions">
+            <button class="cbtn" id="btn-sleep-cancel" type="button">Cancel</button>
+            <button class="cbtn cbtn-primary" id="btn-sleep-confirm" type="button">Confirm</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TIMER -->
+      <section class="group" id="grp-timer" data-show="remote timer playing update">
+        <div class="grouplabel">Timer</div>
+
+        <div class="row" id="row-timer">
+          <div class="row-timer-fill" id="fill-timer"></div>
+          <span class="row-label" id="label-timer">Sleep timer</span>
+          <span class="row-value tabular" id="val-timer">off</span>
+          <button class="timer-cancel" id="btn-timer-cancel" type="button" hidden>Cancel</button>
+        </div>
+
+        <div class="row-presets" id="timer-presets" data-show="remote">
+          <button class="chip-preset" data-min="15" type="button">15m</button>
+          <button class="chip-preset" data-min="30" type="button">30m</button>
+          <button class="chip-preset" data-min="45" type="button">45m</button>
+          <button class="chip-preset" data-min="60" type="button">60m</button>
+        </div>
+
+        <div class="row row-hint" id="row-timer-hint" data-show="timer">
+          <span>Fades volume over the last minute</span>
+        </div>
+      </section>
+
+    </main>
+
+    <nav class="switcher" id="switcher" aria-label="Mockup state switcher">
+      <button class="chip" data-target="setup" type="button">Setup</button>
+      <button class="chip active" data-target="remote" type="button">Remote</button>
+      <button class="chip" data-target="timer" type="button">Timer</button>
+      <button class="chip" data-target="playing" type="button">Playing</button>
+      <button class="chip" data-target="offline" type="button">Offline</button>
+      <button class="chip" data-target="update" type="button">Update</button>
+    </nav>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var state = {
+    current: 'remote',
+    volume: 62,
+    brightness: 78,
+    isPlaying: true,
+    timerInterval: null,
+    timerRemaining: 0,
+    timerTotal: 0,
+    updatePhase: 'available', // available | downloading | ready | installing | done
+    updateTimer: null,
+    testTimeout: null
+  };
+
+  var tracks = [
+    { title: 'Frank Ocean &mdash; Nights', artist: 'Frank Ocean &middot; Music' },
+    { title: 'Frank Ocean &mdash; Solo', artist: 'Frank Ocean &middot; Music' },
+    { title: 'Frank Ocean &mdash; Ivy', artist: 'Frank Ocean &middot; Music' }
+  ];
+  var trackIndex = 0;
+
+  function $(id){ return document.getElementById(id); }
+
+  // ---------- Visibility engine ----------
+  function applyVisibility(){
+    document.querySelectorAll('[data-show]').forEach(function(el){
+      var list = el.getAttribute('data-show').split(' ');
+      var show = list.indexOf(state.current) !== -1;
+      el.classList.toggle('is-hidden', !show);
+    });
+  }
+
+  function updateChips(){
+    document.querySelectorAll('.chip').forEach(function(chip){
+      chip.classList.toggle('active', chip.getAttribute('data-target') === state.current);
+    });
+  }
+
+  function goState(name, payload){
+    if (name === state.current) return;
+    var prev = state.current;
+    leaveState(prev, name);
+    state.current = name;
+    document.body.setAttribute('data-state', name);
+    updateChips();
+    applyVisibility();
+    enterState(name, prev, payload || {});
+  }
+
+  function leaveState(name){
+    if (name === 'timer'){
+      if (state.timerInterval){
+        clearInterval(state.timerInterval);
+        state.timerInterval = null;
+      }
+      setTimerRowIdle();
+    }
+  }
+
+  function enterState(name, prev, payload){
+    if (name === 'setup'){
+      resetTestRow();
+    }
+    if (name === 'timer'){
+      state.timerTotal = payload.total || 900;
+      state.timerRemaining = (payload.total != null) ? payload.total : 765;
+      tickTimer(true);
+      state.timerInterval = setInterval(function(){ tickTimer(false); }, 1000);
+    }
+    if (name === 'update'){
+      resetUpdateRow();
+    }
+  }
+
+  // ---------- Setup: test connection ----------
+  var testing = false;
+  function resetTestRow(){
+    testing = false;
+    if (state.testTimeout){ clearTimeout(state.testTimeout); state.testTimeout = null; }
+    $('label-test').textContent = 'Test connection';
+    $('val-test').innerHTML = '<svg class="icon icon-chevron" width="15" height="15"><use href="#i-chevron"></use></svg>';
+  }
+  $('row-test').addEventListener('click', function(){
+    if (testing) return;
+    testing = true;
+    $('label-test').textContent = 'Testing connection…';
+    $('val-test').innerHTML = '<span class="spinner" aria-hidden="true"></span>';
+    state.testTimeout = setTimeout(function(){
+      $('label-test').textContent = 'Connected';
+      $('val-test').innerHTML = '<svg class="icon" width="15" height="15"><use href="#i-check"></use></svg>';
+      state.testTimeout = setTimeout(function(){
+        goState('remote');
+      }, 900);
+    }, 1100);
+  });
+
+  // ---------- Token show/hide ----------
+  $('btn-eye').addEventListener('click', function(){
+    var input = $('in-token');
+    var icon = $('icon-eye');
+    var hidden = input.type === 'password';
+    input.type = hidden ? 'text' : 'password';
+    icon.innerHTML = hidden ? '<use href="#i-eye-off"></use>' : '<use href="#i-eye"></use>';
+    $('btn-eye').setAttribute('aria-label', hidden ? 'Hide token' : 'Show token');
+  });
+
+  // ---------- Generic slider ----------
+  function makeSlider(row, fillEl, opts){
+    var value = opts.initial;
+    var dragging = false;
+
+    function render(){
+      fillEl.style.width = value + '%';
+      if (opts.onRender) opts.onRender(value);
+      row.setAttribute('aria-valuenow', Math.round(value));
+    }
+    function setFromClientX(clientX){
+      var rect = row.getBoundingClientRect();
+      var pct = ((clientX - rect.left) / rect.width) * 100;
+      value = Math.max(0, Math.min(100, pct));
+      render();
+    }
+    row.addEventListener('pointerdown', function(e){
+      if (state.current === 'offline') return;
+      dragging = true;
+      row.classList.add('dragging');
+      try { row.setPointerCapture(e.pointerId); } catch(err){}
+      setFromClientX(e.clientX);
+    });
+    row.addEventListener('pointermove', function(e){
+      if (!dragging) return;
+      setFromClientX(e.clientX);
+    });
+    function end(){
+      if (!dragging) return;
+      dragging = false;
+      row.classList.remove('dragging');
+      if (opts.onCommit) opts.onCommit(Math.round(value));
+    }
+    row.addEventListener('pointerup', end);
+    row.addEventListener('pointercancel', end);
+    row.addEventListener('keydown', function(e){
+      if (state.current === 'offline') return;
+      var step = 4;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp'){ value = Math.min(100, value + step); render(); e.preventDefault(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown'){ value = Math.max(0, value - step); render(); e.preventDefault(); }
+      else if (e.key === 'Home'){ value = 0; render(); e.preventDefault(); }
+      else if (e.key === 'End'){ value = 100; render(); e.preventDefault(); }
+    });
+
+    render();
+    return {
+      get: function(){ return value; },
+      set: function(v){ value = v; render(); }
+    };
+  }
+
+  var volumeSlider = makeSlider($('row-volume'), $('fill-volume'), {
+    initial: state.volume,
+    onRender: function(v){ $('val-volume').textContent = Math.round(v); },
+    onCommit: function(v){ state.volume = v; }
+  });
+  var brightnessSlider = makeSlider($('row-brightness'), $('fill-brightness'), {
+    initial: state.brightness,
+    onRender: function(v){ $('val-brightness').textContent = Math.round(v); },
+    onCommit: function(v){ state.brightness = v; }
+  });
+
+  var scrubDuration = 238; // seconds, 3:58
+  function fmtTime(s){
+    s = Math.max(0, Math.round(s));
+    var m = Math.floor(s / 60), r = s % 60;
+    return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+  makeSlider($('row-scrub'), $('fill-scrub'), {
+    initial: 42,
+    onRender: function(v){
+      var elapsed = (v / 100) * scrubDuration;
+      $('val-scrub').textContent = fmtTime(elapsed) + ' / ' + fmtTime(scrubDuration);
+    }
+  });
+
+  // ---------- Now playing / transport ----------
+  function renderTrack(){
+    $('label-nowplaying').innerHTML = 'Now playing &middot; ' + tracks[trackIndex].title;
+    $('label-artist').innerHTML = tracks[trackIndex].artist;
+  }
+  function setPlaying(playing){
+    state.isPlaying = playing;
+    $('icon-play').classList.toggle('show', !playing);
+    $('icon-play').classList.toggle('hide', playing);
+    $('icon-pause').classList.toggle('show', playing);
+    $('icon-pause').classList.toggle('hide', !playing);
+    $('eq-indicator').classList.toggle('is-playing', playing);
+  }
+  $('btn-playpause').addEventListener('click', function(e){
+    e.stopPropagation();
+    setPlaying(!state.isPlaying);
+  });
+  $('btn-next').addEventListener('click', function(e){
+    e.stopPropagation();
+    trackIndex = (trackIndex + 1) % tracks.length;
+    renderTrack();
+  });
+  $('btn-prev').addEventListener('click', function(e){
+    e.stopPropagation();
+    trackIndex = (trackIndex - 1 + tracks.length) % tracks.length;
+    renderTrack();
+  });
+  $('row-nowplaying').addEventListener('click', function(){
+    if (state.current === 'offline') return;
+    goState('playing');
+  });
+
+  // ---------- Lock ----------
+  var locking = false;
+  $('row-lock').addEventListener('click', function(){
+    if (locking || state.current === 'offline') return;
+    locking = true;
+    $('label-lock').textContent = 'Locking…';
+    setTimeout(function(){
+      $('label-lock').textContent = 'Locked';
+      $('val-lock').innerHTML = '<svg class="icon" width="15" height="15"><use href="#i-check"></use></svg>';
+      setTimeout(function(){
+        $('label-lock').textContent = 'Lock';
+        $('val-lock').innerHTML = '<svg class="icon icon-chevron" width="15" height="15"><use href="#i-chevron"></use></svg>';
+        locking = false;
+      }, 1200);
+    }, 700);
+  });
+
+  // ---------- Sleep confirm ----------
+  var rowSleep = $('row-sleep');
+  var sleeping = false;
+  rowSleep.addEventListener('click', function(e){
+    if (sleeping || state.current === 'offline') return;
+    if (e.target.closest('.confirm-actions')) return;
+    rowSleep.classList.toggle('confirming');
+  });
+  $('btn-sleep-cancel').addEventListener('click', function(e){
+    e.stopPropagation();
+    rowSleep.classList.remove('confirming');
+  });
+  $('btn-sleep-confirm').addEventListener('click', function(e){
+    e.stopPropagation();
+    sleeping = true;
+    rowSleep.classList.remove('confirming');
+    $('label-sleep').textContent = 'Sleeping…';
+    setTimeout(function(){
+      $('label-sleep').textContent = 'Asleep';
+      $('val-sleep').innerHTML = '<svg class="icon" width="15" height="15"><use href="#i-check"></use></svg>';
+      setTimeout(function(){
+        $('label-sleep').textContent = 'Sleep';
+        $('val-sleep').innerHTML = '<svg class="icon icon-chevron" width="15" height="15"><use href="#i-chevron"></use></svg>';
+        sleeping = false;
+      }, 1300);
+    }, 900);
+  });
+
+  // ---------- Sleep timer ----------
+  var timerPresets = $('timer-presets');
+  var rowTimer = $('row-timer');
+  var btnTimerCancel = $('btn-timer-cancel');
+
+  rowTimer.addEventListener('click', function(e){
+    if (e.target.closest('.timer-cancel')) return;
+    if (state.current === 'timer'){
+      goState('remote');
+      return;
+    }
+    if (state.current === 'remote'){
+      timerPresets.classList.toggle('open');
+    }
+  });
+
+  document.querySelectorAll('.chip-preset').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var mins = parseInt(btn.getAttribute('data-min'), 10);
+      timerPresets.classList.remove('open');
+      goState('timer', { total: mins * 60 });
+    });
+  });
+
+  btnTimerCancel.addEventListener('click', function(e){
+    e.stopPropagation();
+    goState('remote');
+  });
+
+  function setTimerRowIdle(){
+    $('label-timer').textContent = 'Sleep timer';
+    $('val-timer').textContent = 'off';
+    btnTimerCancel.hidden = true;
+    $('fill-timer').style.width = '0%';
+    $('fill-timer').classList.remove('fading');
+    rowTimer.classList.remove('is-fading');
+  }
+
+  function tickTimer(isInit){
+    var fillEl = $('fill-timer');
+    var labelEl = $('label-timer');
+    var valEl = $('val-timer');
+    var rowEl = $('row-timer');
+
+    if (!isInit){
+      state.timerRemaining = Math.max(0, state.timerRemaining - 1);
+    }
+    var pct = state.timerTotal ? (state.timerRemaining / state.timerTotal) * 100 : 0;
+    fillEl.style.width = pct + '%';
+
+    var isFading = state.timerRemaining <= 60 && state.timerRemaining > 0;
+    fillEl.classList.toggle('fading', isFading);
+    rowEl.classList.toggle('is-fading', isFading);
+
+    btnTimerCancel.hidden = false;
+    if (state.timerRemaining <= 0){
+      labelEl.textContent = 'Sleep timer';
+      valEl.textContent = 'fading out';
+      if (state.timerInterval){
+        clearInterval(state.timerInterval);
+        state.timerInterval = null;
+      }
+    } else {
+      labelEl.textContent = 'Sleep timer';
+      valEl.textContent = fmtTime(state.timerRemaining);
+    }
+  }
+  setTimerRowIdle();
+
+  // ---------- Offline retry ----------
+  var retrying = false;
+  $('row-retry').addEventListener('click', function(){
+    if (retrying) return;
+    retrying = true;
+    $('label-retry').textContent = 'Retrying…';
+    $('val-retry').innerHTML = '<span class="spinner" aria-hidden="true"></span>';
+    setTimeout(function(){
+      $('label-retry').textContent = 'Still unreachable';
+      $('val-retry').innerHTML = '';
+      setTimeout(function(){
+        $('label-retry').textContent = 'Retry connection';
+        $('val-retry').innerHTML = '<svg class="icon icon-chevron" width="15" height="15"><use href="#i-chevron"></use></svg>';
+        retrying = false;
+      }, 1300);
+    }, 1200);
+  });
+
+  // ---------- Update flow ----------
+  function resetUpdateRow(){
+    state.updatePhase = 'available';
+    if (state.updateTimer){ clearInterval(state.updateTimer); state.updateTimer = null; }
+    var row = $('row-update'), fill = $('fill-update');
+    row.classList.remove('is-live');
+    fill.classList.remove('active');
+    fill.style.width = '0%';
+    $('label-update').innerHTML = 'Update available &middot; 1.4.2 &rarr; 1.5.0';
+    $('val-update').innerHTML = '<svg class="icon" width="15" height="15"><use href="#i-download"></use></svg>';
+  }
+  $('row-update').addEventListener('click', function(){
+    var row = this, fill = $('fill-update');
+    if (state.updatePhase === 'available'){
+      state.updatePhase = 'downloading';
+      row.classList.add('is-live');
+      fill.classList.add('active');
+      $('label-update').textContent = 'Downloading update…';
+      var pct = 0;
+      state.updateTimer = setInterval(function(){
+        pct = Math.min(100, pct + 4);
+        fill.style.width = pct + '%';
+        $('val-update').textContent = pct + '%';
+        if (pct >= 100){
+          clearInterval(state.updateTimer);
+          state.updateTimer = null;
+          state.updatePhase = 'ready';
+          row.classList.remove('is-live');
+          fill.classList.remove('active');
+          $('label-update').textContent = 'Restart to install';
+          $('val-update').innerHTML = '<svg class="icon icon-chevron" width="15" height="15"><use href="#i-chevron"></use></svg>';
+        }
+      }, 90);
+    } else if (state.updatePhase === 'ready'){
+      state.updatePhase = 'installing';
+      $('label-update').textContent = 'Installing…';
+      $('val-update').innerHTML = '<span class="spinner" aria-hidden="true"></span>';
+      setTimeout(function(){
+        state.updatePhase = 'done';
+        fill.style.width = '100%';
+        $('label-update').textContent = "You're up to date";
+        $('val-update').innerHTML = '<svg class="icon" width="15" height="15"><use href="#i-check"></use></svg>';
+      }, 1200);
+    }
+  });
+
+  // ---------- Header scroll shadow ----------
+  var ledger = $('ledger'), idbar = $('idbar');
+  ledger.addEventListener('scroll', function(){
+    idbar.classList.toggle('is-scrolled', ledger.scrollTop > 4);
+  });
+
+  // ---------- State switcher ----------
+  document.querySelectorAll('.chip').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      goState(chip.getAttribute('data-target'));
+    });
+  });
+
+  // ---------- Init ----------
+  applyVisibility();
+  updateChips();
+})();
+</script>
+</body>
+</html>
