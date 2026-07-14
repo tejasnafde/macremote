@@ -2,7 +2,7 @@
   "expo": {
     "name": "macremote",
     "slug": "macremote",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "scheme": "macremote",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "io.github.tejasnafde.macremote",
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "backgroundColor": "#0B0E12",
         "foregroundImage": "./assets/android-icon-foreground.png",
