@@ -9,11 +9,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app_util.log_util import errorlogger, infologger
+from common_helper.ddc_bridge import DDCError
 from common_helper.discord_alert import alert, send_lifecycle
 from common_helper.hs_bridge import HSError
 from common_helper.version import get_version
 from handler.sleep_timer_handler import sleep_timer_service
-from routers import brightness, media, meta, sleep_timer, status, system, volume
+from routers import brightness, displays, media, meta, sleep_timer, status, system, volume
 
 
 @asynccontextmanager
@@ -31,6 +32,7 @@ app.include_router(meta.router)
 app.include_router(media.router)
 app.include_router(volume.router)
 app.include_router(brightness.router)
+app.include_router(displays.router)
 app.include_router(system.router)
 app.include_router(sleep_timer.router)
 app.include_router(status.router)
@@ -44,6 +46,16 @@ async def hs_error_handler(request: Request, exc: HSError) -> JSONResponse:
         description=f"Hammerspoon bridge failed: {exc}",
     )
     return JSONResponse(status_code=502, content={"error": "hammerspoon bridge failed"})
+
+
+@app.exception_handler(DDCError)
+async def ddc_error_handler(request: Request, exc: DDCError) -> JSONResponse:
+    errorlogger.error(f"ddc_bridge | {request.method} {request.url.path} | {exc}")
+    alert(
+        title=f"502 {request.method} {request.url.path}",
+        description=f"DDC bridge failed: {exc}",
+    )
+    return JSONResponse(status_code=502, content={"error": "ddc bridge failed"})
 
 
 @app.middleware("http")
