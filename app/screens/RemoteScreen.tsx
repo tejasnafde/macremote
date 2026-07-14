@@ -92,8 +92,9 @@ export function RemoteScreen() {
     );
   }
 
-  const isPlaying = status?.is_playing ?? Boolean(status?.now_playing?.title);
-  const timerRemaining = status?.sleep_timer?.active ? status.sleep_timer.remaining_seconds : 0;
+  const npState = status?.now_playing?.state?.toLowerCase() ?? null;
+  const isPlaying = npState ? npState.includes('play') : Boolean(status?.now_playing?.title);
+  const timerRemaining = status?.sleep_timer?.remaining_seconds ?? 0;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

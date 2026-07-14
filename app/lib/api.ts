@@ -22,22 +22,22 @@ export interface NowPlaying {
   title: string | null;
   artist: string | null;
   app: string | null;
+  /** e.g. "kPlaybackStatePlaying" | "playing" | "paused" (Hammerspoon spotify/itunes state) */
+  state?: string | null;
 }
 
 export interface SleepTimerStatus {
-  active: boolean;
   remaining_seconds: number;
 }
 
 export interface StatusResponse {
   now_playing: NowPlaying | null;
-  /** Best-effort playing flag; if the server omits it, callers fall back to now_playing presence. */
-  is_playing?: boolean;
-  volume: number;
+  volume: number | null;
   muted: boolean;
-  brightness: number;
-  battery: number;
-  sleep_timer: SleepTimerStatus;
+  brightness: number | null;
+  battery: number | null;
+  /** null when no timer is armed */
+  sleep_timer: SleepTimerStatus | null;
 }
 
 export interface HealthResponse {
