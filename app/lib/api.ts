@@ -49,6 +49,24 @@ export interface VersionResponse {
   version: string;
 }
 
+export interface SeekResponse {
+  ok: boolean;
+  /** Which mechanism handled the seek: exact for spotify/music, arrow-key fallback otherwise. */
+  via: 'spotify' | 'music' | 'keys' | 'noop';
+}
+
+export interface Display {
+  id: string;
+  name: string;
+  builtin: boolean;
+  /** null when the display doesn't report brightness (probe failed or unsupported). */
+  brightness: number | null;
+}
+
+export interface DisplaysResponse {
+  displays: Display[];
+}
+
 async function requestWithConfig<T>(
   cfg: { url: string; token: string },
   path: string,
@@ -108,6 +126,9 @@ export const api = {
   playPause: (): Promise<void> => request('/media/playpause', { method: 'POST' }),
   next: (): Promise<void> => request('/media/next', { method: 'POST' }),
   previous: (): Promise<void> => request('/media/previous', { method: 'POST' }),
+  /** seconds is clamped -60..60 by the server; negative rewinds, positive skips ahead. */
+  seek: (seconds: number): Promise<SeekResponse> =>
+    request('/media/seek', { method: 'POST', body: JSON.stringify({ seconds }) }),
 
   volumeUp: (): Promise<void> => request('/volume/up', { method: 'POST' }),
   volumeDown: (): Promise<void> => request('/volume/down', { method: 'POST' }),
@@ -115,8 +136,13 @@ export const api = {
   setVolume: (level: number): Promise<void> =>
     request('/volume', { method: 'PUT', body: JSON.stringify({ level }) }),
 
-  brightnessUp: (): Promise<void> => request('/brightness/up', { method: 'POST' }),
-  brightnessDown: (): Promise<void> => request('/brightness/down', { method: 'POST' }),
+  /** display is a /displays id ("builtin" or an external index); omit for classic single-display behavior. */
+  brightnessUp: (display?: string): Promise<void> =>
+    request(`/brightness/up${display ? `?display=${encodeURIComponent(display)}` : ''}`, { method: 'POST' }),
+  brightnessDown: (display?: string): Promise<void> =>
+    request(`/brightness/down${display ? `?display=${encodeURIComponent(display)}` : ''}`, { method: 'POST' }),
+
+  displays: (): Promise<DisplaysResponse> => request<DisplaysResponse>('/displays'),
 
   lock: (): Promise<void> => request('/system/lock', { method: 'POST' }),
   sleep: (): Promise<void> => request('/system/sleep', { method: 'POST' }),
