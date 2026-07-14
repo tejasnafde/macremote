@@ -81,17 +81,26 @@ Rules for any agent working this plan:
       Android SDK/Gradle build aren't available in this environment.
 
 ## P5 — Server auto-update
-- [ ] `ops/update.sh`: fetch tags → newer than `server/VERSION`? → `git pull`
+- [x] `ops/update.sh`: fetch tags → newer than `server/VERSION`? → `git pull`
       (merge) → `uv sync` → restart service → 10× health poll → on fail:
       checkout previous tag, restart, Discord ❌; on success Discord ✅
-- [ ] `ops/io.macremote.updater.plist` (StartInterval 300)
-- [ ] Acceptance: simulated flow — check out older tag locally, run update.sh,
+- [x] `ops/io.macremote.updater.plist` (StartInterval 300)
+- [x] Acceptance: LIVE flow validated — check out older tag locally, run update.sh,
       observe pull→restart→✅ embed.
 
 ## P6 — v0.1.0 release (the finish line)
-- [ ] README: screenshots, install (Mac + APK + Tailscale), API table, brand
-- [ ] Full pass: pytest + e2e_mac.sh green, CI green on main
-- [ ] `scripts/ship.sh 0.1.0` → tag → CI builds/signs APK → GitHub Release →
+- [x] README: screenshots, install (Mac + APK + Tailscale), API table, brand
+- [x] Full pass: pytest + e2e_mac.sh green, CI green on main
+- [x] `scripts/ship.sh 0.1.0` → tag → CI builds/signs APK → GitHub Release →
       **Discord webhook received by user with installable APK link** ← STOP CONDITION
 - [ ] Post-release manual checklist for user: install APK, Tailscale login on
       both devices, Hammerspoon Accessibility grant (if not yet done)
+
+## Post-v0.1.0 notes (2026-07-15)
+- Service runs from ~/development/macremote (deployed clone) — NOT the Desktop
+  dev repo: launchd cannot read TCC-protected dirs (Desktop/Documents). Dev repo
+  stays at ~/Desktop/projects/macremote. install.sh should warn about TCC paths.
+- Android cannot resolve `.local` hostnames — use LAN IP or Tailscale hostname.
+- Backlog candidate from user: per-tab browser media control (multiple Firefox
+  tabs playing) — needs a browser extension bridge; media keys can only drive
+  the OS-level "most recent" media session.
