@@ -1,35 +1,96 @@
+// Main Deck screen, ported from deck.html's #screenMain + status strip +
+// volume rail + lock overlay + sleep sheet. This single screen carries every
+// "state" the mockup demoed via its chip-bar switcher (Remote / Timer /
+// Playing / Offline / Update) as live derived state from /status polling and
+// connectivity, not separate routes.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ButtonRow, RemoteButton } from '../components/RemoteButton';
+import { AppState, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PressableScale } from '../components/PressableScale';
+import { useToast } from '../components/Toast';
+import {
+  IconBattery,
+  IconBrightnessDown,
+  IconBrightnessUp,
+  IconCursor,
+  IconChevronDouble,
+  IconDownload,
+  IconLock,
+  IconNext,
+  IconPause,
+  IconPlay,
+  IconPrev,
+  IconRefresh,
+  IconSleep,
+  IconWifiOff,
+  IconX,
+} from '../components/icons';
 import { api, ApiError, StatusResponse } from '../lib/api';
-import { hasServerConfig } from '../lib/storage';
-import { theme } from '../lib/theme';
+import { checkForUpdate, currentVersion, downloadAndInstall } from '../lib/apk';
+import { getActiveDevice } from '../lib/devices';
+import { colors, fonts, radii, railWidth, spacing } from '../theme';
+import { LockOverlay } from './remote/LockOverlay';
+import { SleepSheet } from './remote/SleepSheet';
+import { VolumeRail } from './remote/VolumeRail';
 
 const POLL_MS = 3000;
-const TIMER_CHOICES = [15, 30, 45, 60];
 
-export function RemoteScreen() {
+function fmtTime(totalSeconds: number): string {
+  const sec = Math.max(0, Math.round(totalSeconds));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+interface RemoteScreenProps {
+  onOpenDevices: () => void;
+  refreshToken: number;
+}
+
+export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps) {
+  const insets = useSafeAreaInsets();
+  const toast = useToast();
+
+  const [deviceName, setDeviceName] = useState('Mac');
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [online, setOnline] = useState(true);
-  const [configured, setConfigured] = useState(true);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [confirmSleep, setConfirmSleep] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(null);
+  const [trackToast, setTrackToast] = useState<string | null>(null);
+  const [lockOpen, setLockOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [optimisticSleepSeconds, setOptimisticSleepSeconds] = useState<number | null>(null);
+
+  const [updateInfo, setUpdateInfo] = useState<{ version: string; apkUrl: string } | null>(null);
+  const [updatePhase, setUpdatePhase] = useState<'idle' | 'downloading'>('idle');
+  const [updateProgress, setUpdateProgress] = useState(0);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const trackToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshStatus = useCallback(async () => {
-    if (!(await hasServerConfig())) {
-      setConfigured(false);
-      return;
-    }
-    setConfigured(true);
     try {
       const s = await api.status();
       setStatus(s);
       setOnline(true);
+      setOptimisticPlaying(null);
+      if (s.sleep_timer) setOptimisticSleepSeconds(null);
     } catch {
       setOnline(false);
     }
   }, []);
+
+  useEffect(() => {
+    getActiveDevice().then((d) => setDeviceName(d?.name ?? 'Mac'));
+  }, [refreshToken]);
 
   useEffect(() => {
     function stopPolling() {
@@ -43,204 +104,709 @@ export function RemoteScreen() {
       refreshStatus();
       pollRef.current = setInterval(refreshStatus, POLL_MS);
     }
-
     startPolling();
     let appState = AppState.currentState;
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active' && appState !== 'active') {
-        startPolling();
-      } else if (next !== 'active') {
-        stopPolling();
-      }
+      if (next === 'active' && appState !== 'active') startPolling();
+      else if (next !== 'active') stopPolling();
       appState = next;
     });
-
     return () => {
       stopPolling();
       sub.remove();
     };
-  }, [refreshStatus]);
+  }, [refreshStatus, refreshToken]);
 
-  async function run(name: string, action: () => Promise<void>) {
-    setBusy(name);
+  // Auto-check for a newer APK once per launch (throttled to once/day inside
+  // checkForUpdate); shown as the rail-aware banner below instead of an Alert.
+  useEffect(() => {
+    checkForUpdate(false).then((latest) => {
+      if (latest) setUpdateInfo({ version: latest.version, apkUrl: latest.apkUrl });
+    });
+  }, []);
+
+  function flashTrackToast(msg: string) {
+    setTrackToast(msg);
+    if (trackToastTimer.current) clearTimeout(trackToastTimer.current);
+    trackToastTimer.current = setTimeout(() => setTrackToast(null), 1100);
+  }
+
+  async function handlePrev() {
+    flashTrackToast('Previous track');
     try {
-      await action();
+      await api.previous();
       await refreshStatus();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Something went wrong';
-      Alert.alert('Action failed', message);
-    } finally {
-      setBusy(null);
+      toast.show(errMessage(err));
+    }
+  }
+  async function handleNext() {
+    flashTrackToast('Next track');
+    try {
+      await api.next();
+      await refreshStatus();
+    } catch (err) {
+      toast.show(errMessage(err));
     }
   }
 
-  function confirmAndSleep() {
-    Alert.alert('Sleep the Mac?', 'This will put the Mac to sleep now.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sleep', style: 'destructive', onPress: () => run('sleep', api.sleep) },
-    ]);
-  }
-
-  if (!configured) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={styles.emptyTitle}>Not set up yet</Text>
-        <Text style={styles.emptyBody}>
-          Head to Settings and enter your server URL and token to start controlling your Mac.
-        </Text>
-      </View>
-    );
-  }
-
   const npState = status?.now_playing?.state?.toLowerCase() ?? null;
-  const isPlaying = npState ? npState.includes('play') : Boolean(status?.now_playing?.title);
-  const timerRemaining = status?.sleep_timer?.remaining_seconds ?? 0;
+  const serverIsPlaying = npState ? npState.includes('play') : false;
+  const isPlaying = optimisticPlaying ?? serverIsPlaying;
+
+  async function handlePlayPause() {
+    setOptimisticPlaying(!isPlaying);
+    try {
+      await api.playPause();
+      await refreshStatus();
+    } catch (err) {
+      setOptimisticPlaying(null);
+      toast.show(errMessage(err));
+    }
+  }
+
+  async function handleSetVolume(v: number) {
+    try {
+      await api.setVolume(Math.round(v));
+    } catch {
+      // throttled drag updates fail silently; the final commit will retry
+    }
+  }
+  async function handleCommitVolume(v: number) {
+    try {
+      await api.setVolume(Math.round(v));
+      await refreshStatus();
+    } catch (err) {
+      toast.show(errMessage(err));
+    }
+  }
+  async function handleToggleMute() {
+    try {
+      await api.volumeMute();
+      await refreshStatus();
+    } catch (err) {
+      toast.show(errMessage(err));
+    }
+  }
+
+  const brightHold = useRef<ReturnType<typeof setInterval> | null>(null);
+  function startBrightnessHold(direction: 'up' | 'down') {
+    const action = direction === 'up' ? api.brightnessUp : api.brightnessDown;
+    action().catch(() => undefined);
+    toast.show(direction === 'up' ? 'Brightness up' : 'Brightness down', 1100);
+    if (brightHold.current) clearInterval(brightHold.current);
+    brightHold.current = setInterval(() => {
+      action().catch(() => undefined);
+    }, 220);
+  }
+  function stopBrightnessHold() {
+    if (brightHold.current) {
+      clearInterval(brightHold.current);
+      brightHold.current = null;
+      refreshStatus();
+    }
+  }
+
+  async function handleLockPress() {
+    setLockOpen(true);
+    try {
+      await api.lock();
+    } catch (err) {
+      toast.show(errMessage(err));
+    }
+  }
+
+  async function handleBanishCursor() {
+    try {
+      await api.banishCursor();
+      toast.show('Cursor parked', 1400);
+    } catch (err) {
+      toast.show(errMessage(err));
+    }
+  }
+
+  const sleepRemaining = optimisticSleepSeconds ?? status?.sleep_timer?.remaining_seconds ?? null;
+
+  async function handleArmTimer(minutes: number) {
+    setOptimisticSleepSeconds(minutes * 60);
+    try {
+      await api.setSleepTimer(minutes);
+      toast.show(`Sleep timer started, ${minutes} min`, 2000);
+      await refreshStatus();
+    } catch (err) {
+      setOptimisticSleepSeconds(null);
+      toast.show(errMessage(err));
+    }
+  }
+  async function handleCancelTimer() {
+    setOptimisticSleepSeconds(null);
+    setSheetOpen(false);
+    try {
+      await api.cancelSleepTimer();
+      toast.show('Sleep timer cancelled', 1800);
+      await refreshStatus();
+    } catch (err) {
+      toast.show(errMessage(err));
+    }
+  }
+  async function handleSleepNow() {
+    try {
+      await api.sleep();
+    } catch (err) {
+      toast.show(errMessage(err));
+    }
+  }
+
+  async function handleRetry() {
+    setRetrying(true);
+    await refreshStatus();
+    setRetrying(false);
+    if (online) toast.show('Reconnected', 2000);
+  }
+
+  async function handleDownloadUpdate() {
+    if (!updateInfo) return;
+    setUpdatePhase('downloading');
+    setUpdateProgress(0);
+    try {
+      await downloadAndInstall(updateInfo.apkUrl, setUpdateProgress);
+      toast.show('Installer opened. Follow the prompt on your phone.', 2600);
+      setUpdateInfo(null);
+      setUpdatePhase('idle');
+    } catch (err) {
+      setUpdatePhase('idle');
+      toast.show(err instanceof Error ? err.message : 'Update failed');
+    }
+  }
+
+  const nowPlaying = status?.now_playing;
+  const hasNowPlaying = Boolean(nowPlaying?.title);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {!online && (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineText}>Can&apos;t reach the server</Text>
-        </View>
-      )}
+    <View style={styles.root}>
+      <StatusStrip
+        online={online}
+        deviceName={deviceName}
+        nowPlaying={hasNowPlaying ? nowPlaying! : null}
+        isPlaying={isPlaying}
+        battery={status?.battery ?? null}
+        onOpenDevices={onOpenDevices}
+      />
 
-      <View style={styles.card}>
-        <Text style={styles.nowPlayingApp}>{status?.now_playing?.app ?? 'Nothing playing'}</Text>
-        <Text style={styles.nowPlayingTitle} numberOfLines={1}>
-          {status?.now_playing?.title ?? '—'}
-        </Text>
-        <Text style={styles.nowPlayingArtist} numberOfLines={1}>
-          {status?.now_playing?.artist ?? ''}
-        </Text>
+      <View style={[styles.main, { paddingBottom: insets.bottom + 20 }]}>
+        {updateInfo && (
+          <UpdateBanner
+            version={updateInfo.version}
+            fromVersion={currentVersion()}
+            phase={updatePhase}
+            progress={updateProgress}
+            onDownload={handleDownloadUpdate}
+          />
+        )}
+
+        {!online && (
+          <OfflineBanner retrying={retrying} onRetry={handleRetry} />
+        )}
+
+        {online && hasNowPlaying && (
+          <NowPlayingHero title={nowPlaying!.title!} artist={nowPlaying!.artist} app={nowPlaying!.app} isPlaying={isPlaying} />
+        )}
+
+        <View style={[styles.thumbZone, !online && styles.inert]}>
+          {sleepRemaining != null && (
+            <TimerPill
+              remainingSeconds={sleepRemaining}
+              onPress={() => setSheetOpen(true)}
+              onCancel={handleCancelTimer}
+            />
+          )}
+
+          <View style={styles.transport}>
+            {trackToast && (
+              <View style={styles.trackToast}>
+                <Text style={styles.trackToastText}>{trackToast}</Text>
+              </View>
+            )}
+            <PressableScale style={styles.tBtnSide} onPress={handlePrev} accessibilityLabel="Previous track">
+              <IconPrev size={24} color={colors.off} />
+            </PressableScale>
+            <PressableScale style={styles.tBtnPlay} onPress={handlePlayPause} accessibilityLabel="Play or pause">
+              {isPlaying ? <IconPause size={38} color={colors.greenInk} /> : <IconPlay size={38} color={colors.greenInk} />}
+            </PressableScale>
+            <PressableScale style={styles.tBtnSide} onPress={handleNext} accessibilityLabel="Next track">
+              <IconNext size={24} color={colors.off} />
+            </PressableScale>
+          </View>
+
+          <View style={styles.secondaryRow}>
+            <PressableScale
+              style={styles.sBtn}
+              onPressIn={() => startBrightnessHold('down')}
+              onPressOut={stopBrightnessHold}
+              accessibilityLabel="Brightness down"
+            >
+              <IconBrightnessDown size={17} color={colors.off72} />
+            </PressableScale>
+            <PressableScale
+              style={styles.sBtn}
+              onPressIn={() => startBrightnessHold('up')}
+              onPressOut={stopBrightnessHold}
+              accessibilityLabel="Brightness up"
+            >
+              <IconBrightnessUp size={17} color={colors.off72} />
+            </PressableScale>
+            <PressableScale style={styles.sBtn} onPress={handleLockPress} accessibilityLabel="Lock">
+              <IconLock size={17} color={colors.off72} />
+            </PressableScale>
+            <PressableScale
+              style={[styles.sBtn, sleepRemaining != null && styles.sBtnOn]}
+              onPress={() => setSheetOpen(true)}
+              accessibilityLabel="Sleep timer"
+            >
+              <IconSleep size={17} color={sleepRemaining != null ? colors.green : colors.off72} />
+            </PressableScale>
+            <PressableScale style={styles.sBtn} onPress={handleBanishCursor} accessibilityLabel="Park cursor">
+              <IconCursor size={17} color={colors.off72} />
+            </PressableScale>
+          </View>
+        </View>
       </View>
 
-      <Section title="Media">
-        <ButtonRow>
-          <RemoteButton label="⏮" onPress={() => run('previous', api.previous)} loading={busy === 'previous'} />
-          <RemoteButton
-            label={isPlaying ? '⏸' : '▶️'}
-            onPress={() => run('playpause', api.playPause)}
-            loading={busy === 'playpause'}
-            variant="primary"
-            size="large"
-          />
-          <RemoteButton label="⏭" onPress={() => run('next', api.next)} loading={busy === 'next'} />
-        </ButtonRow>
-      </Section>
+      <VolumeRail
+        value={status?.volume ?? 0}
+        muted={status?.muted ?? false}
+        disabled={!online}
+        onChangeVolume={handleSetVolume}
+        onCommitVolume={handleCommitVolume}
+        onToggleMute={handleToggleMute}
+      />
 
-      <Section title="Volume">
-        <ButtonRow>
-          <RemoteButton label="🔉" onPress={() => run('vol-down', api.volumeDown)} loading={busy === 'vol-down'} />
-          <RemoteButton
-            label={status?.muted ? '🔇' : '🔊'}
-            onPress={() => run('mute', api.volumeMute)}
-            loading={busy === 'mute'}
-            variant={status?.muted ? 'danger' : 'default'}
-          />
-          <RemoteButton label="🔊+" onPress={() => run('vol-up', api.volumeUp)} loading={busy === 'vol-up'} />
-        </ButtonRow>
-        {status && (
-          <Text style={styles.meta}>
-            Volume {status.volume}%{status.muted ? ' (muted)' : ''}
-          </Text>
-        )}
-      </Section>
+      <LockOverlay visible={lockOpen} onUnlock={() => setLockOpen(false)} />
 
-      <Section title="Brightness">
-        <ButtonRow>
-          <RemoteButton label="🔅" onPress={() => run('bright-down', api.brightnessDown)} loading={busy === 'bright-down'} />
-          <RemoteButton label="🔆" onPress={() => run('bright-up', api.brightnessUp)} loading={busy === 'bright-up'} />
-        </ButtonRow>
-        {status && <Text style={styles.meta}>Brightness {status.brightness}%</Text>}
-      </Section>
-
-      <Section title="System">
-        <ButtonRow>
-          <RemoteButton label="Lock" onPress={() => run('lock', api.lock)} loading={busy === 'lock'} />
-          <RemoteButton label="Sleep" variant="danger" onPress={confirmAndSleep} loading={busy === 'sleep'} />
-        </ButtonRow>
-      </Section>
-
-      <Section title="Sleep timer">
-        {timerRemaining > 0 ? (
-          <>
-            <Text style={styles.timerCountdown}>{formatRemaining(timerRemaining)}</Text>
-            <RemoteButton
-              label="Cancel timer"
-              variant="danger"
-              onPress={() => run('cancel-timer', api.cancelSleepTimer)}
-              loading={busy === 'cancel-timer'}
-            />
-          </>
-        ) : (
-          <ButtonRow>
-            {TIMER_CHOICES.map((m) => (
-              <RemoteButton
-                key={m}
-                label={`${m}m`}
-                onPress={() => run(`timer-${m}`, () => api.setSleepTimer(m))}
-                loading={busy === `timer-${m}`}
-              />
-            ))}
-          </ButtonRow>
-        )}
-      </Section>
-    </ScrollView>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
+      <SleepSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        remainingSeconds={sleepRemaining}
+        onArm={(mins) => {
+          handleArmTimer(mins);
+        }}
+        onCancelTimer={handleCancelTimer}
+        onSleepNow={handleSleepNow}
+      />
     </View>
   );
 }
 
-function formatRemaining(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${m}:${String(s).padStart(2, '0')} remaining`;
+function errMessage(err: unknown): string {
+  return err instanceof ApiError ? err.message : 'Something went wrong';
+}
+
+/* ---------------------------- status strip ---------------------------- */
+
+function StatusStrip({
+  online,
+  deviceName,
+  nowPlaying,
+  isPlaying,
+  battery,
+  onOpenDevices,
+}: {
+  online: boolean;
+  deviceName: string;
+  nowPlaying: { title: string | null; artist: string | null; app: string | null } | null;
+  isPlaying: boolean;
+  battery: number | null;
+  onOpenDevices: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const scrollX = useSharedValue(0);
+  const label = nowPlaying
+    ? `${nowPlaying.title ?? 'Untitled'} · ${nowPlaying.artist ?? 'Unknown'} · ${nowPlaying.app ?? ''}`
+    : null;
+
+  useEffect(() => {
+    if (label && isPlaying) {
+      scrollX.value = withRepeat(withTiming(-220, { duration: 9000, easing: Easing.linear }), -1, false);
+    } else {
+      scrollX.value = withTiming(scrollX.value, { duration: 0 });
+    }
+  }, [label, isPlaying, scrollX]);
+
+  const marqueeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: scrollX.value }] }));
+
+  return (
+    <View style={[styles.statusStrip, { paddingTop: insets.top + 16 }]}>
+      <PressableScale style={styles.conn} onPress={onOpenDevices} accessibilityLabel="Switch device">
+        <View style={[styles.connDot, !online && styles.connDotOffline]} />
+        <Text style={styles.connLabel} numberOfLines={1}>
+          {deviceName}
+        </Text>
+        <IconChevronDouble size={11} color={colors.off38} />
+      </PressableScale>
+
+      <View style={styles.marquee}>
+        {label ? (
+          <Animated.View style={[styles.marqueeTrack, marqueeStyle]}>
+            <Text style={styles.marqueeText} numberOfLines={1}>
+              {label}
+            </Text>
+          </Animated.View>
+        ) : (
+          <Text style={styles.marqueeIdle} numberOfLines={1}>
+            Nothing playing
+          </Text>
+        )}
+      </View>
+
+      {battery != null && (
+        <View style={styles.battery}>
+          <IconBattery size={20} color={colors.off55} />
+          <Text style={styles.batteryPct}>{battery}%</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/* ------------------------------ hero card ------------------------------ */
+
+function NowPlayingHero({
+  title,
+  artist,
+  app,
+  isPlaying,
+}: {
+  title: string;
+  artist: string | null;
+  app: string | null;
+  isPlaying: boolean;
+}) {
+  const bar1 = useSharedValue(0);
+  const bar2 = useSharedValue(0);
+  const bar3 = useSharedValue(0);
+
+  useEffect(() => {
+    if (isPlaying) {
+      bar1.value = withRepeat(withSequence(withTiming(1, { duration: 500 }), withTiming(0.2, { duration: 500 })), -1, true);
+      bar2.value = withRepeat(withSequence(withTiming(0.3, { duration: 420 }), withTiming(1, { duration: 420 })), -1, true);
+      bar3.value = withRepeat(withSequence(withTiming(1, { duration: 460 }), withTiming(0.3, { duration: 460 })), -1, true);
+    }
+  }, [isPlaying, bar1, bar2, bar3]);
+
+  const s1 = useAnimatedStyle(() => ({ height: 4 + bar1.value * 8 }));
+  const s2 = useAnimatedStyle(() => ({ height: 4 + bar2.value * 8 }));
+  const s3 = useAnimatedStyle(() => ({ height: 4 + bar3.value * 8 }));
+
+  return (
+    <View style={styles.npHero}>
+      <View style={styles.npCard}>
+        <View style={styles.npArt} />
+        <View style={styles.npBody}>
+          <Text style={styles.npTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          {artist ? (
+            <Text style={styles.npArtist} numberOfLines={1}>
+              {artist}
+            </Text>
+          ) : null}
+          <View style={styles.npMeta}>
+            {app ? (
+              <View style={styles.npAppPill}>
+                <Text style={styles.npAppPillText}>{app}</Text>
+              </View>
+            ) : null}
+            <View style={styles.eqBars}>
+              <Animated.View style={[styles.eqBar, s1]} />
+              <Animated.View style={[styles.eqBar, s2]} />
+              <Animated.View style={[styles.eqBar, s3]} />
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/* ------------------------------ timer pill ------------------------------ */
+
+function TimerPill({
+  remainingSeconds,
+  onPress,
+  onCancel,
+}: {
+  remainingSeconds: number;
+  onPress: () => void;
+  onCancel: () => void;
+}) {
+  const [local, setLocal] = useState(remainingSeconds);
+  useEffect(() => {
+    setLocal(remainingSeconds);
+    const id = setInterval(() => setLocal((r) => Math.max(0, r - 1)), 1000);
+    return () => clearInterval(id);
+  }, [remainingSeconds]);
+
+  const fading = local <= 60;
+
+  return (
+    <PressableScale
+      style={[styles.timerPill, fading && styles.timerPillFading]}
+      onPress={onPress}
+    >
+      <IconSleep size={15} color={colors.green} />
+      <Text style={styles.timerPillTime}>{fmtTime(local)}</Text>
+      <Text style={[styles.timerPillLabel, fading && styles.timerPillLabelFading]}>
+        {fading ? 'fading now' : 'sleep timer'}
+      </Text>
+      <PressableScale style={styles.timerPillClose} onPress={onCancel} accessibilityLabel="Cancel sleep timer">
+        <IconX size={11} color={colors.off72} />
+      </PressableScale>
+    </PressableScale>
+  );
+}
+
+/* -------------------------------- banners -------------------------------- */
+
+function UpdateBanner({
+  version,
+  fromVersion,
+  phase,
+  progress,
+  onDownload,
+}: {
+  version: string;
+  fromVersion: string;
+  phase: 'idle' | 'downloading';
+  progress: number;
+  onDownload: () => void;
+}) {
+  return (
+    <View style={styles.banner}>
+      <View style={styles.bannerTop}>
+        <View style={styles.bannerBadge}>
+          <IconDownload size={18} color={colors.green} />
+        </View>
+        <Text style={styles.bannerTitle}>Update available</Text>
+      </View>
+      <Text style={styles.bannerSub}>
+        macremote {version} is ready, upgrading from {fromVersion}.
+      </Text>
+      {phase === 'downloading' && (
+        <View style={styles.bannerProgressWrap}>
+          <View style={[styles.bannerProgressFill, { width: `${progress}%` }]} />
+        </View>
+      )}
+      <View style={styles.bannerRow}>
+        <PressableScale style={styles.btnSecondaryAccent} onPress={onDownload} disabled={phase === 'downloading'}>
+          <IconDownload size={15} color={colors.greenInk} />
+          <Text style={styles.btnSecondaryAccentLabel}>
+            {phase === 'downloading' ? 'Downloading…' : 'Download & Install'}
+          </Text>
+        </PressableScale>
+        {phase === 'downloading' && <Text style={styles.progressPct}>{Math.round(progress)}%</Text>}
+      </View>
+    </View>
+  );
+}
+
+function OfflineBanner({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
+  return (
+    <View style={styles.offlineBanner}>
+      <View style={styles.offlineIcon}>
+        <IconWifiOff size={26} color={colors.ember} />
+      </View>
+      <Text style={styles.offlineTitle}>Can&apos;t reach your Mac</Text>
+      <Text style={styles.offlineBody}>Make sure both devices are awake and on the same network.</Text>
+      <PressableScale style={styles.btnSecondaryAccent} onPress={onRetry} disabled={retrying}>
+        <IconRefresh size={15} color={colors.greenInk} />
+        <Text style={styles.btnSecondaryAccentLabel}>{retrying ? 'Retrying…' : 'Retry'}</Text>
+      </PressableScale>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.bg },
-  centered: { alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
-  content: { padding: 16, gap: 16, paddingBottom: 40 },
-  offlineBanner: {
-    backgroundColor: theme.warning,
-    borderRadius: 10,
-    padding: 10,
-  },
-  offlineText: { color: '#1a1400', fontWeight: '700', textAlign: 'center' },
-  card: {
-    backgroundColor: theme.surface,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  nowPlayingApp: { color: theme.textMuted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 },
-  nowPlayingTitle: { color: theme.text, fontSize: 20, fontWeight: '700', marginTop: 4 },
-  nowPlayingArtist: { color: theme.textMuted, fontSize: 15, marginTop: 2 },
-  section: {
-    backgroundColor: theme.surface,
-    borderRadius: 16,
-    padding: 16,
+  root: { flex: 1, backgroundColor: colors.ink950 },
+  statusStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  conn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  connDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.green,
+    shadowColor: colors.green,
+    shadowOpacity: 0.6,
+    shadowRadius: 4,
+  },
+  connDotOffline: { backgroundColor: colors.ember, shadowColor: colors.ember },
+  connLabel: { fontFamily: fonts.semiBold, fontSize: 12.5, color: colors.off72, maxWidth: 140 },
+  marquee: { flex: 1, minWidth: 0, height: 20, overflow: 'hidden', justifyContent: 'center' },
+  marqueeTrack: { flexDirection: 'row' },
+  marqueeText: { fontFamily: fonts.medium, fontSize: 12, color: colors.off55 },
+  marqueeIdle: { fontFamily: fonts.medium, fontSize: 12, color: colors.off38 },
+  battery: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  batteryPct: { fontFamily: fonts.semiBold, fontSize: 12, color: colors.off55 },
+
+  main: { flex: 1, paddingHorizontal: spacing.screenX, minHeight: 0 },
+  inert: { opacity: 0.32 },
+
+  banner: {
+    backgroundColor: colors.ink850,
     borderWidth: 1,
-    borderColor: theme.border,
+    borderColor: colors.lineStrong,
+    borderRadius: radii.lg,
+    padding: 16,
+    marginTop: 10,
+    marginRight: railWidth - spacing.screenX,
   },
-  sectionTitle: {
-    color: theme.textMuted,
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+  bannerTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
+  bannerBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: colors.green14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  meta: { color: theme.textMuted, fontSize: 13 },
-  timerCountdown: { color: theme.accent, fontSize: 24, fontWeight: '700', textAlign: 'center' },
-  emptyTitle: { color: theme.text, fontSize: 20, fontWeight: '700' },
-  emptyBody: { color: theme.textMuted, fontSize: 15, textAlign: 'center' },
+  bannerTitle: { fontFamily: fonts.extraBold, fontSize: 14.5, color: colors.off },
+  bannerSub: { fontFamily: fonts.body, fontSize: 12.5, color: colors.off55, lineHeight: 18, marginVertical: 8 },
+  bannerProgressWrap: { height: 6, borderRadius: radii.full, backgroundColor: colors.ink700, overflow: 'hidden', marginBottom: 12 },
+  bannerProgressFill: { height: '100%', backgroundColor: colors.green, borderRadius: radii.full },
+  bannerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  btnSecondaryAccent: {
+    height: 40,
+    paddingHorizontal: 16,
+    borderRadius: radii.sm,
+    backgroundColor: colors.green,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  btnSecondaryAccentLabel: { fontFamily: fonts.bold, fontSize: 13, color: colors.greenInk },
+  progressPct: { fontFamily: fonts.bold, fontSize: 12.5, color: colors.off55, marginLeft: 'auto' },
+
+  offlineBanner: {
+    alignItems: 'center',
+    marginTop: 22,
+    marginRight: railWidth - spacing.screenX,
+    paddingTop: 8,
+  },
+  offlineIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.ember16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  offlineTitle: { fontFamily: fonts.display, fontSize: 20, color: colors.off, marginBottom: 8 },
+  offlineBody: { fontFamily: fonts.body, fontSize: 13.5, color: colors.off55, textAlign: 'center', maxWidth: 260, marginBottom: 20 },
+
+  npHero: { marginTop: 8, marginRight: railWidth - spacing.screenX },
+  npCard: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'center',
+    backgroundColor: colors.ink850,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    padding: 16,
+  },
+  npArt: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: colors.ink600,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  npBody: { flex: 1, minWidth: 0 },
+  npTitle: { fontFamily: fonts.extraBold, fontSize: 17, color: colors.off },
+  npArtist: { fontFamily: fonts.body, fontSize: 13.5, color: colors.off55, marginTop: 2 },
+  npMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  npAppPill: { backgroundColor: colors.ink700, paddingHorizontal: 9, paddingVertical: 4, borderRadius: radii.full },
+  npAppPillText: { fontFamily: fonts.bold, fontSize: 11, color: colors.off55 },
+  eqBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2.5, height: 12 },
+  eqBar: { width: 2.5, borderRadius: 2, backgroundColor: colors.green },
+
+  thumbZone: { marginTop: 'auto', alignItems: 'center', paddingRight: 56 },
+
+  timerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingLeft: 14,
+    paddingRight: 8,
+    borderRadius: radii.full,
+    backgroundColor: colors.ink850,
+    borderWidth: 1,
+    borderColor: colors.line,
+    marginBottom: 18,
+  },
+  timerPillFading: { backgroundColor: colors.green14, borderColor: colors.green24 },
+  timerPillTime: { fontFamily: fonts.bold, fontSize: 13, color: colors.off },
+  timerPillLabel: { fontFamily: fonts.body, fontSize: 11.5, color: colors.off55 },
+  timerPillLabelFading: { color: colors.green },
+  timerPillClose: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.ink700,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22 },
+  tBtnSide: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: colors.ink850,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tBtnPlay: {
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+    backgroundColor: colors.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trackToast: {
+    position: 'absolute',
+    top: -30,
+    alignSelf: 'center',
+    backgroundColor: colors.ink800,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: radii.full,
+  },
+  trackToastText: { fontFamily: fonts.bold, fontSize: 11.5, color: colors.off55 },
+
+  // Five buttons now that cursor-park joined brightness/lock/timer — sized
+  // down slightly from the mockup's 50px so the row still clears the volume
+  // rail on a 360px-wide phone without wrapping.
+  secondaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 22 },
+  sBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.ink850,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sBtnOn: { backgroundColor: colors.green14 },
 });

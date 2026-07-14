@@ -7,7 +7,7 @@
 import { Linking } from 'react-native';
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import { api } from '../lib/api';
-import { hasServerConfig } from '../lib/storage';
+import { hasAnyDevice } from '../lib/devices';
 import { RemoteWidget } from './RemoteWidget';
 import { isWidgetClickAction, type WidgetClickAction } from './widget-actions';
 
@@ -37,7 +37,7 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps): Promise<
       return;
 
     case 'WIDGET_CLICK': {
-      if (!(await hasServerConfig())) {
+      if (!(await hasAnyDevice())) {
         // Nothing configured yet — open the app so the user can set it up.
         await Linking.openURL('macremote://').catch(() => undefined);
       } else if (clickAction && isWidgetClickAction(clickAction)) {

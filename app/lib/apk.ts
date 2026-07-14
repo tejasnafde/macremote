@@ -70,12 +70,35 @@ export async function checkForUpdate(force = false): Promise<LatestRelease | nul
   return isNewer(latest.version, currentVersion()) ? latest : null;
 }
 
-/** Download the release APK to cache and launch the system package installer. */
-export async function downloadAndInstall(apkUrl: string): Promise<void> {
+/**
+ * Download the release APK to cache and launch the system package installer.
+ * `onProgress` (0-100) is optional so the plain fire-and-forget callers keep
+ * working unchanged; the Deck update banner passes one to drive its progress
+ * bar via expo-file-system's resumable download.
+ */
+export async function downloadAndInstall(
+  apkUrl: string,
+  onProgress?: (pct: number) => void
+): Promise<void> {
   const dest = `${FileSystem.cacheDirectory}macremote-update.apk`;
-  const r = await FileSystem.downloadAsync(apkUrl, dest);
-  if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
-  const contentUri = await FileSystem.getContentUriAsync(r.uri);
+  let uri: string;
+  if (onProgress) {
+    const downloadable = FileSystem.createDownloadResumable(apkUrl, dest, {}, (data) => {
+      const pct =
+        data.totalBytesExpectedToWrite > 0
+          ? (data.totalBytesWritten / data.totalBytesExpectedToWrite) * 100
+          : 0;
+      onProgress(Math.min(100, Math.round(pct)));
+    });
+    const result = await downloadable.downloadAsync();
+    if (!result || result.status !== 200) throw new Error(`HTTP ${result?.status ?? 'error'}`);
+    uri = result.uri;
+  } else {
+    const r = await FileSystem.downloadAsync(apkUrl, dest);
+    if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+    uri = r.uri;
+  }
+  const contentUri = await FileSystem.getContentUriAsync(uri);
   await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
     data: contentUri,
     type: 'application/vnd.android.package-archive',
