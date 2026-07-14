@@ -104,3 +104,15 @@ Rules for any agent working this plan:
 - Backlog candidate from user: per-tab browser media control (multiple Firefox
   tabs playing) — needs a browser extension bridge; media keys can only drive
   the OS-level "most recent" media session.
+
+## v0.2.0 backlog (agreed with user, 2026-07-15)
+- OTA updates via EAS Update (free tier). Expo account: glycocare login OK per
+  user; prefer migrating to nafdetejas@gmail.com. Wire expo-updates,
+  EXPO_TOKEN secret, `ship.sh --ota` for JS-only releases. Native changes keep
+  the APK path.
+- Per-tab browser media control: cross-browser WebExtension (Firefox +
+  Chromium, same codebase) reporting audible tabs via tabs.query({audible}),
+  per-tab play/pause via scripting.executeScript, focus via tabs.update.
+  Server: /ws/browser aggregation + sessions in /status; app: sessions list UI.
+- CI speed: cache Gradle + npm in release.yml (~15min → ~7min).
+- Settings flicker fix (already on main, ships with next release).
