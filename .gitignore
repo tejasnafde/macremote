@@ -33,3 +33,6 @@ design/.vercel/
 .claude/
 .agents/
 .github/skills/
+.github/hooks/
+.codex/
+skills-lock.json
