@@ -131,11 +131,33 @@ Rules for any agent working this plan:
   pre-fade level → system sleep. Server-side change in sleep_timer_handler.
 
 ## External display brightness (user Q, design round 2) - v0.2.x candidate
-- DDC/CI via `m1ddc` (brew, open source) for external monitors on Apple Silicon;
-  keep hs.brightness for the built-in panel. Server: GET /displays
-  (hs.screen.allScreens enumeration) + per-display brightness endpoints.
-  App: display-aware brightness control when >1 screen. Caveat: DDC support
-  varies by monitor/cable; degrade gracefully to built-in-only.
+- [x] Server side done: DDC/CI via `m1ddc` (brew, open source) for external
+      monitors on Apple Silicon; kept hs.brightness for the built-in panel.
+      `m1ddc` installed via brew on this Mac (`brew install m1ddc`, v1.2.0);
+      `m1ddc display list` sees the user's LG UltraGear at index 2, but DDC
+      reads/writes fail over the current cable/adapter ("DDC communication
+      failure: unknown subsystem error"), which confirms the
+      graceful-degradation path is load-bearing, not just theoretical.
+  - `config/settings.py`: `M1DDC_BIN` (default `/opt/homebrew/bin/m1ddc`),
+    `BRIGHTNESS_STEP` (default 8, external up/down step).
+  - `common_helper/ddc_bridge.py`: `run_m1ddc(args)` (subprocess, 5s timeout,
+    own lock, `DDCError`) + `parse_display_list()` regex-parsing
+    `m1ddc display list` output (liberal: skips unmatched lines, "(null)"
+    names fall back to "Display N").
+  - `common_helper/lua_snippets.py`: added `brightness_set()` and
+    `BRIGHTNESS_GET` (nil-safe built-in brightness read for /displays).
+  - `GET /displays` (`routers/displays.py` + `handler/displays_handler.py`):
+    built-in entry from Hammerspoon, external entries from `m1ddc display
+    list` with per-display luminance; every probe failure degrades to
+    `brightness: null` (or an empty external list) instead of a 5xx.
+  - `handler/brightness_handler.py` + `routers/brightness.py`: `/brightness/up`
+    and `/brightness/down` gained an optional `display` query param (default
+    `"builtin"`, existing behavior/tests unchanged); new `PUT /brightness`
+    for absolute set on either kind. External failures raise `DDCError` ->
+    502 + Discord alert, mirroring the existing `HSError` path (new handler
+    in `main.py`).
+  - App: display-aware brightness control when >1 screen is being handled
+    separately (per this task's scope, server-only).
 
 ## P7 status — Deck UI implementation (branch `deck-ui`, worktree `macremote-deck`)
 - [x] `app/theme.ts`: tokens ported from `design/mockups/deck.html`'s CSS

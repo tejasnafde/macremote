@@ -69,6 +69,21 @@ done
 C1="$(code -X POST "$BASE/brightness/up")"; C2="$(code -X POST "$BASE/brightness/down")"
 [ "$C1" = 200 ] && [ "$C2" = 200 ] && ok "brightness up/down 200" || warn "brightness ($C1/$C2) — external displays have no software brightness"
 
+# 7b. displays: built-in + any DDC/CI external monitors (m1ddc). Tolerant:
+# only warn if no external display is detected, since DDC support varies by
+# monitor/cable and this must never be a hard failure.
+C="$(code "$BASE/displays")"
+if [ "$C" = 200 ] && jq -e 'has("displays") and (.displays | type == "array") and (.displays | length > 0)' /tmp/e2e_body >/dev/null 2>&1; then
+  ok "GET /displays 200 with displays array: $(cat /tmp/e2e_body)"
+  if jq -e '.displays | any(.builtin == false)' /tmp/e2e_body >/dev/null 2>&1; then
+    ok "external display detected via m1ddc"
+  else
+    warn "no external display detected (m1ddc not installed, none connected, or DDC/CI unsupported over the current cable)"
+  fi
+else
+  bad "GET /displays shape (code $C: $(cat /tmp/e2e_body))"
+fi
+
 # 8. sleep timer set / visible / cancel (60m — never fires during test)
 C="$(code -X POST -H 'Content-Type: application/json' -d '{"minutes":60}' "$BASE/sleep-timer")"
 R="$(code "$BASE/status"; true)"; REMAIN="$(jq -r '.sleep_timer.remaining_seconds // .sleep_timer // empty' /tmp/e2e_body 2>/dev/null)"
