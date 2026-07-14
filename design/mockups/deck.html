@@ -170,7 +170,8 @@
   body[data-app-state="setup"] .screen-main{ display:none; }
   .screen-main{
     display:flex; flex-direction:column;
-    padding:0 18px calc(var(--chip-bar-h) + env(safe-area-inset-bottom,0px) + 14px);
+    /* chip bar occupies the bottom ~64px + inset; keep every control clear of it */
+    padding:0 18px calc(76px + env(safe-area-inset-bottom,0px));
     min-height:0;
   }
 
@@ -412,6 +413,7 @@
     bottom:calc(var(--chip-bar-h) + env(safe-area-inset-bottom,0px) + 18px);
     width:58px; z-index:2;
     display:flex; flex-direction:column; align-items:center;
+    touch-action:none;
   }
   .vol-value{ font-family:var(--font-display); font-size:15px; margin-bottom:10px; font-variant-numeric:tabular-nums;
     opacity:0; transform:translateY(3px); transition:opacity .2s var(--ease), transform .2s var(--ease); }
@@ -421,6 +423,7 @@
     background:var(--ink-850); border:1px solid var(--line);
     overflow:hidden; cursor:pointer;
     box-shadow:0 1px 0 rgba(255,255,255,.04) inset;
+    touch-action:none;
   }
   .vol-fill{
     position:absolute; left:0; right:0; bottom:0; height:60%;
@@ -460,7 +463,8 @@
     width:100%; max-width:428px; z-index:21;
     background:var(--ink-900); border:1px solid var(--line-strong); border-bottom:none;
     border-radius:28px 28px 0 0;
-    padding:12px 22px calc(env(safe-area-inset-bottom,0px) + 26px);
+    /* clear the floating state-switcher chip bar (z above the sheet) */
+    padding:12px 22px calc(76px + env(safe-area-inset-bottom,0px) + 8px);
     box-shadow:0 -20px 60px -10px rgba(0,0,0,.6);
     transition:transform .42s var(--ease-soft);
   }
@@ -1157,44 +1161,64 @@
   }
   function stopHold(){ clearInterval(holdInterval); holdInterval = null; }
 
-  function pctFromEvent(clientY){
+  // Absolute volume from pointer Y: 0 at the track's bottom edge, 100 at its top.
+  function volFromY(clientY){
     var rect = volTrack.getBoundingClientRect();
-    var ratio = 1 - (clientY - rect.top) / rect.height;
-    return clamp(ratio*100, 0, 100);
+    if(rect.height <= 0) return volume;
+    return clamp((rect.bottom - clientY) / rect.height * 100, 0, 100);
   }
 
-  volThumb.addEventListener("pointerdown", function(e){
-    e.stopPropagation();
+  var railPressed = false;
+  var pressStartY = 0;
+  var DRAG_THRESHOLD = 6; // px of vertical travel before a hold-repeat becomes a drag
+
+  function beginDrag(clientY){
+    stopHold();
     dragging = true;
     volTrack.classList.add("is-dragging");
     volValue.classList.add("is-visible");
-    try{ volThumb.setPointerCapture(e.pointerId); }catch(err){}
-  });
-  volTrack.addEventListener("pointerdown", function(e){
-    if(dragging) return;
-    if(e.target === volThumb) return;
-    var y = e.clientY;
-    // press-and-hold zone: tap upper/lower half steps + repeats
-    startHold(stepFromEvent(y));
-    try{ volTrack.setPointerCapture(e.pointerId); }catch(err){}
-  });
-  function onTrackMove(e){
-    if(dragging){
-      setVolume(pctFromEvent(e.clientY));
-    }
+    setVolume(volFromY(clientY));
   }
-  volTrack.addEventListener("pointermove", onTrackMove);
+
+  // Capture on the whole track: thumb presses bubble here too (e.target tells them apart).
+  volTrack.addEventListener("pointerdown", function(e){
+    e.preventDefault();
+    railPressed = true;
+    pressStartY = e.clientY;
+    try{ volTrack.setPointerCapture(e.pointerId); }catch(err){}
+    volValue.classList.add("is-visible");
+    if(e.target === volThumb){
+      beginDrag(e.clientY);           // grabbing the thumb drags immediately
+    } else {
+      startHold(stepFromEvent(e.clientY)); // press-and-hold repeat zones (upper/lower half)
+    }
+  });
+
+  volTrack.addEventListener("pointermove", function(e){
+    if(!railPressed) return;
+    if(!dragging){
+      // a real drag cancels the hold-repeat
+      if(Math.abs(e.clientY - pressStartY) > DRAG_THRESHOLD){
+        beginDrag(e.clientY);
+      }
+      return;
+    }
+    setVolume(volFromY(e.clientY));
+  });
+
   function endTrackPress(e){
+    if(!railPressed) return;
+    railPressed = false;
+    stopHold();
     if(dragging){
       dragging = false;
       volTrack.classList.remove("is-dragging");
-      clearTimeout(volValueTimeout);
-      volValueTimeout = setTimeout(function(){ volValue.classList.remove("is-visible"); }, 700);
     }
-    stopHold();
+    try{ volTrack.releasePointerCapture(e.pointerId); }catch(err){}
+    clearTimeout(volValueTimeout);
+    volValueTimeout = setTimeout(function(){ volValue.classList.remove("is-visible"); }, 700);
   }
   volTrack.addEventListener("pointerup", endTrackPress);
-  volTrack.addEventListener("pointerleave", function(e){ if(!dragging) stopHold(); });
   volTrack.addEventListener("pointercancel", endTrackPress);
 
   volMute.addEventListener("click", function(){

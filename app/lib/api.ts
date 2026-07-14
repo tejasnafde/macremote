@@ -81,6 +81,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      const hint = token
+        ? `API token rejected by the server (sent ${token.length} chars). Re-paste it from your server/.env — no backticks or spaces.`
+        : 'No API token saved — paste it in Settings and hit Save.';
+      throw new ApiError(hint, 'http', res.status);
+    }
     throw new ApiError(`HTTP ${res.status} on ${path}`, 'http', res.status);
   }
 

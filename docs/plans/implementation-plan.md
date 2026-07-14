@@ -116,3 +116,11 @@ Rules for any agent working this plan:
   Server: /ws/browser aggregation + sessions in /status; app: sessions list UI.
 - CI speed: cache Gradle + npm in release.yml (~15min → ~7min).
 - Settings flicker fix (already on main, ships with next release).
+
+## Multi-device (user feedback, 2026-07-15 — design round 1)
+- App: config becomes devices[] {name, url, token}, one active; Devices screen
+  (list w/ online status + glance info, switch, add = setup flow); widget acts
+  on active device. Server: no change needed per-machine (each Mac runs its own
+  macremote server); app aggregates. /status could add hostname/device name.
+- Future: Windows agent (Python server + pycaw/keyboard shims instead of
+  Hammerspoon) — same API contract, so the app treats it identically.
