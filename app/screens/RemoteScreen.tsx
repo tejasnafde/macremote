@@ -20,8 +20,8 @@ import {
   IconBattery,
   IconBrightnessDown,
   IconBrightnessUp,
-  IconCursor,
   IconChevronDouble,
+  IconCursor,
   IconDownload,
   IconLock,
   IconNext,
@@ -29,14 +29,18 @@ import {
   IconPlay,
   IconPrev,
   IconRefresh,
+  IconSeekBack10,
+  IconSeekForward10,
   IconSleep,
   IconWifiOff,
   IconX,
 } from '../components/icons';
-import { api, ApiError, StatusResponse } from '../lib/api';
+import { api, ApiError, Display, StatusResponse } from '../lib/api';
 import { checkForUpdate, currentVersion, downloadAndInstall } from '../lib/apk';
 import { getActiveDevice } from '../lib/devices';
+import { getBrightnessTarget, setBrightnessTarget } from '../lib/displayTarget';
 import { colors, fonts, radii, railWidth, spacing } from '../theme';
+import { DisplayChooser } from './remote/DisplayChooser';
 import { LockOverlay } from './remote/LockOverlay';
 import { SleepSheet } from './remote/SleepSheet';
 import { VolumeRail } from './remote/VolumeRail';
@@ -60,6 +64,7 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   const toast = useToast();
 
   const [deviceName, setDeviceName] = useState('Mac');
+  const [deviceId, setDeviceId] = useState<string | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [online, setOnline] = useState(true);
   const [retrying, setRetrying] = useState(false);
@@ -68,6 +73,15 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   const [lockOpen, setLockOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [optimisticSleepSeconds, setOptimisticSleepSeconds] = useState<number | null>(null);
+
+  // Multi-display brightness targeting: /displays is fetched once per
+  // screen mount / device switch, cached in state for the session, never
+  // polled. null = not fetched yet (or the probe failed) — both cases
+  // degrade to classic single-display behavior with no error surfaced.
+  const [displays, setDisplays] = useState<Display[] | null>(null);
+  const [brightnessTargetId, setBrightnessTargetId] = useState<string | null>(null);
+  const [displayChooserOpen, setDisplayChooserOpen] = useState(false);
+  const keysToastShownRef = useRef(false);
 
   const [updateInfo, setUpdateInfo] = useState<{ version: string; apkUrl: string } | null>(null);
   const [updatePhase, setUpdatePhase] = useState<'idle' | 'downloading'>('idle');
@@ -89,7 +103,35 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   }, []);
 
   useEffect(() => {
-    getActiveDevice().then((d) => setDeviceName(d?.name ?? 'Mac'));
+    getActiveDevice().then((d) => {
+      setDeviceName(d?.name ?? 'Mac');
+      setDeviceId(d?.id ?? null);
+      if (d) {
+        getBrightnessTarget(d.id).then(setBrightnessTargetId);
+      } else {
+        setBrightnessTargetId(null);
+      }
+    });
+  }, [refreshToken]);
+
+  // Lazy, session-cached /displays probe — deliberately not part of the 3s
+  // status poll. A failure (or a single-display Mac) just leaves `displays`
+  // empty and every brightness call below falls back to the classic
+  // no-target request, so there is nothing to surface as an error here.
+  useEffect(() => {
+    let cancelled = false;
+    setDisplays(null);
+    api
+      .displays()
+      .then((res) => {
+        if (!cancelled) setDisplays(res.displays);
+      })
+      .catch(() => {
+        if (!cancelled) setDisplays([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshToken]);
 
   useEffect(() => {
@@ -189,9 +231,23 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
     }
   }
 
+  // Only pass a display id downstream when the Mac actually reports more
+  // than one — a lone builtin display keeps calling the plain /brightness/*
+  // endpoints exactly as before, matching today's classic behavior.
+  const hasMultipleDisplays = (displays?.length ?? 0) > 1;
+  const activeDisplay = hasMultipleDisplays
+    ? (displays?.find((d) => d.id === (brightnessTargetId ?? 'builtin')) ?? null)
+    : null;
+  const showBrightnessTargetLabel = Boolean(activeDisplay && !activeDisplay.builtin);
+
+  function currentBrightnessTarget(): string | undefined {
+    return hasMultipleDisplays && brightnessTargetId ? brightnessTargetId : undefined;
+  }
+
   const brightHold = useRef<ReturnType<typeof setInterval> | null>(null);
   function startBrightnessHold(direction: 'up' | 'down') {
-    const action = direction === 'up' ? api.brightnessUp : api.brightnessDown;
+    const target = currentBrightnessTarget();
+    const action = () => (direction === 'up' ? api.brightnessUp(target) : api.brightnessDown(target));
     action().catch(() => undefined);
     toast.show(direction === 'up' ? 'Brightness up' : 'Brightness down', 1100);
     if (brightHold.current) clearInterval(brightHold.current);
@@ -204,6 +260,26 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
       clearInterval(brightHold.current);
       brightHold.current = null;
       refreshStatus();
+    }
+  }
+
+  async function handleSelectDisplay(id: string) {
+    setBrightnessTargetId(id);
+    setDisplayChooserOpen(false);
+    if (deviceId) {
+      await setBrightnessTarget(deviceId, id);
+    }
+  }
+
+  async function handleSeek(seconds: number) {
+    try {
+      const res = await api.seek(seconds);
+      if (res.via === 'keys' && !keysToastShownRef.current) {
+        keysToastShownRef.current = true;
+        toast.show('Seeked in focused app', 2000);
+      }
+    } catch (err) {
+      toast.show(errMessage(err));
     }
   }
 
@@ -338,23 +414,53 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
             </PressableScale>
           </View>
 
+          <View style={styles.seekRow}>
+            <PressableScale style={styles.seekBtn} onPress={() => handleSeek(-10)} accessibilityLabel="Back 10 seconds">
+              <IconSeekBack10 size={27} color={colors.off72} />
+            </PressableScale>
+            <PressableScale style={styles.seekBtn} onPress={() => handleSeek(10)} accessibilityLabel="Forward 10 seconds">
+              <IconSeekForward10 size={27} color={colors.off72} />
+            </PressableScale>
+          </View>
+
           <View style={styles.secondaryRow}>
-            <PressableScale
-              style={styles.sBtn}
-              onPressIn={() => startBrightnessHold('down')}
-              onPressOut={stopBrightnessHold}
-              accessibilityLabel="Brightness down"
-            >
-              <IconBrightnessDown size={17} color={colors.off72} />
-            </PressableScale>
-            <PressableScale
-              style={styles.sBtn}
-              onPressIn={() => startBrightnessHold('up')}
-              onPressOut={stopBrightnessHold}
-              accessibilityLabel="Brightness up"
-            >
-              <IconBrightnessUp size={17} color={colors.off72} />
-            </PressableScale>
+            <View style={styles.brightCluster}>
+              <View style={styles.brightPair}>
+                <PressableScale
+                  style={styles.sBtn}
+                  onPressIn={() => startBrightnessHold('down')}
+                  onPressOut={stopBrightnessHold}
+                  accessibilityLabel="Brightness down"
+                >
+                  <IconBrightnessDown size={17} color={colors.off72} />
+                </PressableScale>
+                <View style={styles.brightUpWrap}>
+                  <PressableScale
+                    style={styles.sBtn}
+                    onPressIn={() => startBrightnessHold('up')}
+                    onPressOut={stopBrightnessHold}
+                    accessibilityLabel="Brightness up"
+                  >
+                    <IconBrightnessUp size={17} color={colors.off72} />
+                  </PressableScale>
+                  {hasMultipleDisplays && (
+                    <PressableScale
+                      style={styles.displayBadge}
+                      onPress={() => setDisplayChooserOpen(true)}
+                      accessibilityLabel="Choose brightness target display"
+                      hitSlop={8}
+                    >
+                      <IconChevronDouble size={7} color={colors.off72} />
+                    </PressableScale>
+                  )}
+                </View>
+              </View>
+              {showBrightnessTargetLabel && (
+                <Text style={styles.brightTargetLabel} numberOfLines={1}>
+                  {activeDisplay!.name}
+                </Text>
+              )}
+            </View>
             <PressableScale style={styles.sBtn} onPress={handleLockPress} accessibilityLabel="Lock">
               <IconLock size={17} color={colors.off72} />
             </PressableScale>
@@ -382,6 +488,14 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
       />
 
       <LockOverlay visible={lockOpen} onUnlock={() => setLockOpen(false)} />
+
+      <DisplayChooser
+        visible={displayChooserOpen}
+        onClose={() => setDisplayChooserOpen(false)}
+        displays={displays ?? []}
+        selectedId={brightnessTargetId}
+        onSelect={handleSelectDisplay}
+      />
 
       <SleepSheet
         visible={sheetOpen}
@@ -796,10 +910,27 @@ const styles = StyleSheet.create({
   },
   trackToastText: { fontFamily: fonts.bold, fontSize: 11.5, color: colors.off55 },
 
+  // Compact back/forward-10s row, sized between the 44px secondary buttons
+  // and the 66px transport buttons — two 52px circles plus one gap (122px)
+  // is well inside the ~268px budget the thumb zone clears past the volume
+  // rail at 360px width, so it never crowds the transport above it.
+  seekRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 18, marginTop: 16 },
+  seekBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.ink850,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   // Five buttons now that cursor-park joined brightness/lock/timer — sized
   // down slightly from the mockup's 50px so the row still clears the volume
-  // rail on a 360px-wide phone without wrapping.
-  secondaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 22 },
+  // rail on a 360px-wide phone without wrapping. alignItems is flex-start
+  // (not center) because the brightness cluster below can grow one text
+  // line taller when a non-builtin target is active; top-aligning keeps
+  // every icon at the same y regardless.
+  secondaryRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 10, marginTop: 22 },
   sBtn: {
     width: 44,
     height: 44,
@@ -809,4 +940,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sBtnOn: { backgroundColor: colors.green14 },
+
+  // Brightness down+up stay exactly the width they always were (44+10+44,
+  // same footprint the flat five-button row already budgeted for) — the
+  // display-chooser badge is absolutely positioned so it never adds to the
+  // row's width, and the target-name label only adds height, not width.
+  brightCluster: { alignItems: 'center' },
+  brightPair: { flexDirection: 'row', gap: 10 },
+  brightUpWrap: { position: 'relative' },
+  displayBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.ink700,
+    borderWidth: 1,
+    borderColor: colors.ink950,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brightTargetLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 9.5,
+    color: colors.off38,
+    marginTop: 4,
+    maxWidth: 98,
+  },
 });
