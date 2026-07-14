@@ -125,14 +125,25 @@
     padding:calc(env(safe-area-inset-top,0px) + 16px) 20px 12px;
     transition:opacity .35s var(--ease), transform .35s var(--ease);
   }
-  .conn{ display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+  .conn{
+    display:flex; align-items:center; gap:8px; flex:0 0 auto;
+    position:relative; padding:4px 2px; border-radius:var(--r-sm);
+    transition:transform .15s var(--ease), opacity .2s var(--ease);
+  }
+  .conn:active{ transform:scale(.96); }
+  .conn::after{ content:""; position:absolute; inset:-10px -8px; } /* extend hit area to ~44px */
   .conn-dot{
     width:8px; height:8px; border-radius:50%;
     background:var(--green);
     box-shadow:0 0 0 3px var(--green-14), 0 0 10px 1px rgba(74,222,128,.5);
     transition:background .3s var(--ease), box-shadow .3s var(--ease);
   }
-  .conn-label{ font-size:12.5px; font-weight:600; color:var(--off-72); letter-spacing:.01em; white-space:nowrap; }
+  .conn-label{
+    font-size:12.5px; font-weight:600; color:var(--off-72); letter-spacing:.01em; white-space:nowrap;
+    display:inline-block;
+    transition:opacity .18s var(--ease), transform .18s var(--ease);
+  }
+  .conn-chev{ width:11px; height:11px; color:var(--off-38); flex:0 0 auto; }
 
   .marquee{
     flex:1 1 auto; min-width:0;
@@ -168,12 +179,70 @@
   }
   body[data-app-state="setup"] .screen-setup{ display:flex; }
   body[data-app-state="setup"] .screen-main{ display:none; }
+  body[data-app-state="devices"] .screen-devices{ display:flex; }
+  body[data-app-state="devices"] .screen-main{ display:none; }
+  body[data-app-state="setup"] .vol-rail,
+  body[data-app-state="devices"] .vol-rail{ opacity:0 !important; pointer-events:none; }
   .screen-main{
     display:flex; flex-direction:column;
     /* chip bar occupies the bottom ~64px + inset; keep every control clear of it */
     padding:0 18px calc(76px + env(safe-area-inset-bottom,0px));
     min-height:0;
   }
+
+  /* ============================= DEVICES ============================= */
+  .screen-devices{
+    display:none; flex-direction:column;
+    padding:6px 20px calc(76px + env(safe-area-inset-bottom,0px));
+    min-height:0; overflow-y:auto;
+    overscroll-behavior:contain;
+  }
+  .devices-head{ font-family:var(--font-display); font-size:24px; letter-spacing:-.02em; margin-top:8px; }
+  .devices-sub{ font-size:13px; color:var(--off-55); margin:6px 0 20px; }
+  .device-row{
+    width:100%; text-align:left; flex:0 0 auto;
+    display:flex; align-items:center; gap:14px;
+    background:var(--ink-850); border:1px solid var(--line);
+    border-radius:var(--r-lg); padding:16px;
+    margin-bottom:10px;
+    transition:transform .16s var(--ease), border-color .25s var(--ease), background .25s var(--ease);
+  }
+  .device-row:active{ transform:scale(.98); }
+  .device-row.is-active{ border-color:var(--green-24); background:var(--ink-800); }
+  .device-row.is-offline{ opacity:.55; }
+  .device-row.is-teaser{ opacity:.5; background:transparent; border-style:dashed; }
+  .device-row.is-shake{ animation:shake .38s var(--ease); }
+  .device-row.is-switch-pulse{ animation:switch-pulse .5s var(--ease); }
+  @keyframes switch-pulse{
+    0%{ transform:scale(1); }
+    35%{ transform:scale(.97); }
+    100%{ transform:scale(1); }
+  }
+  .device-dot{ width:10px; height:10px; border-radius:50%; background:var(--ink-500); flex:0 0 auto; }
+  .device-dot.is-online{ background:var(--green); box-shadow:0 0 0 3px var(--green-14); }
+  .device-info{ display:flex; flex-direction:column; gap:3px; min-width:0; flex:1 1 auto; }
+  .device-name{ font-size:15.5px; font-weight:800; letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .device-glance{ font-size:12px; color:var(--off-55); font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .device-tag{
+    font-size:10.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
+    background:var(--green); color:var(--green-ink);
+    padding:4px 9px; border-radius:var(--r-full); flex:0 0 auto;
+    opacity:0; transform:scale(.8);
+    transition:opacity .25s var(--ease), transform .25s var(--ease);
+  }
+  .device-row.is-active .device-tag{ opacity:1; transform:scale(1); }
+  .soon-pill{
+    font-size:10.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
+    background:var(--ink-700); color:var(--off-55);
+    padding:4px 9px; border-radius:var(--r-full); flex:0 0 auto;
+  }
+  .device-win{ width:20px; height:20px; color:var(--off-38); flex:0 0 auto; }
+  .device-add{
+    background:transparent; border:1px dashed var(--line-strong);
+    justify-content:center; gap:9px; min-height:58px;
+    color:var(--off-72); font-size:14px; font-weight:700;
+  }
+  .device-add svg{ width:16px; height:16px; flex:0 0 auto; }
 
   /* ---- inert state (offline) ---- */
   .inert-zone{ transition:opacity .4s var(--ease), filter .4s var(--ease); }
@@ -209,6 +278,19 @@
   }
   .field-hint{ font-size:12px; color:var(--ember); margin-top:7px; height:0; opacity:0; transition:opacity .2s var(--ease); }
   .field-hint.is-visible{ opacity:1; height:auto; }
+
+  .input-wrap{ position:relative; }
+  .input-wrap input{ padding-right:58px; }
+  .eye-btn{
+    position:absolute; right:4px; top:50%; margin-top:-22px;
+    width:44px; height:44px; border-radius:12px; /* concentric with 16px input radius */
+    display:flex; align-items:center; justify-content:center;
+    color:var(--off-38);
+    transition:transform .15s var(--ease), color .2s var(--ease);
+  }
+  .eye-btn:active{ transform:scale(.96); }
+  .eye-btn.is-showing{ color:var(--green); }
+  .eye-btn .icon-swap{ width:20px; height:20px; }
 
   .setup-actions{ margin-top:12px; }
   .btn-primary{
@@ -622,10 +704,11 @@
 
       <!-- ===================== STATUS STRIP ===================== -->
       <header class="status-strip">
-        <div class="conn">
+        <button class="conn" id="connBtn" aria-label="Switch device">
           <span class="conn-dot" id="connDot"></span>
-          <span class="conn-label" id="connLabel">Studio Mac</span>
-        </div>
+          <span class="conn-label" id="connLabel">MacBook Air</span>
+          <svg class="conn-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9.5 12 4.5l5 5"/><path d="M7 14.5l5 5 5-5"/></svg>
+        </button>
         <div class="marquee">
           <div class="marquee-track" id="marqueeTrack">
             <span id="marqueeText1">Midnight Static — Kai Wren · Music</span>
@@ -644,8 +727,8 @@
       <section class="screen screen-setup" id="screenSetup">
         <div class="wordmark">mac<span class="accent">remote</span></div>
         <div class="setup-head">
-          <h1>Set up macremote</h1>
-          <p>Connect to the Mac you want to control from your pocket.</p>
+          <h1>Add a device</h1>
+          <p>Connect a Mac you want to control from your pocket. It shows up in My Devices once linked.</p>
         </div>
 
         <div class="field" id="fieldHost">
@@ -654,7 +737,15 @@
         </div>
         <div class="field" id="fieldToken">
           <label for="tokenInput">Access token</label>
-          <input id="tokenInput" type="password" placeholder="Paste the token from your Mac" autocomplete="off" />
+          <div class="input-wrap">
+            <input id="tokenInput" type="password" placeholder="Paste the token from your Mac" autocomplete="off" />
+            <button class="eye-btn" id="eyeBtn" type="button" aria-label="Show token">
+              <span class="icon-swap">
+                <svg class="ic-a" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>
+                <svg class="ic-b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l16 16"/><path d="M9.9 6.2A7.6 7.6 0 0 1 12 5.8c6 0 9.5 6.2 9.5 6.2a15.6 15.6 0 0 1-3 3.7M6.3 7.2A15 15 0 0 0 2.5 12S6 18.2 12 18.2a8.9 8.9 0 0 0 3.7-.8"/><path d="M9.9 10.3a2.9 2.9 0 0 0 4 3.9"/></svg>
+              </span>
+            </button>
+          </div>
           <div class="field-hint" id="setupHint">Enter both fields to continue.</div>
         </div>
 
@@ -670,6 +761,52 @@
             <span class="link" id="setupContinue">Continue →</span>
           </div>
         </div>
+      </section>
+
+      <!-- ===================== DEVICES SCREEN ===================== -->
+      <section class="screen screen-devices" id="screenDevices">
+        <h1 class="devices-head">My Devices</h1>
+        <p class="devices-sub">Control any machine on your network.</p>
+
+        <button class="device-row is-active" data-device="mba" id="deviceMba">
+          <span class="device-dot is-online"></span>
+          <span class="device-info">
+            <span class="device-name">Tejas's MacBook Air</span>
+            <span class="device-glance" id="mbaGlance">battery 84% · vol 62 · v0.1.1</span>
+          </span>
+          <span class="device-tag">Active</span>
+        </button>
+
+        <button class="device-row" data-device="mbp" id="deviceMbp">
+          <span class="device-dot is-online"></span>
+          <span class="device-info">
+            <span class="device-name">MacBook Pro · Den</span>
+            <span class="device-glance">battery 100% · vol 35 · v0.1.1</span>
+          </span>
+          <span class="device-tag">Active</span>
+        </button>
+
+        <button class="device-row is-offline" data-device="mini" id="deviceMini">
+          <span class="device-dot"></span>
+          <span class="device-info">
+            <span class="device-name">Mac mini · Studio</span>
+            <span class="device-glance">offline · last seen 2h ago</span>
+          </span>
+        </button>
+
+        <button class="device-row is-teaser" id="deviceWin">
+          <svg class="device-win" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="7.2" height="7.2" rx="1"/><rect x="12.8" y="4" width="7.2" height="7.2" rx="1"/><rect x="4" y="12.8" width="7.2" height="7.2" rx="1"/><rect x="12.8" y="12.8" width="7.2" height="7.2" rx="1"/></svg>
+          <span class="device-info">
+            <span class="device-name">Windows support</span>
+            <span class="device-glance">PCs join the deck soon</span>
+          </span>
+          <span class="soon-pill">Soon</span>
+        </button>
+
+        <button class="device-row device-add" id="deviceAdd">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add device
+        </button>
       </section>
 
       <!-- ===================== MAIN DECK SCREEN ===================== -->
@@ -895,6 +1032,7 @@
   <nav class="state-switcher" aria-label="Mockup state switcher">
     <button class="chip-mini" data-goto="setup">Setup</button>
     <button class="chip-mini is-active" data-goto="remote">Remote</button>
+    <button class="chip-mini" data-goto="devices">Devices</button>
     <button class="chip-mini" data-goto="timer">Timer</button>
     <button class="chip-mini" data-goto="playing">Playing</button>
     <button class="chip-mini" data-goto="offline">Offline</button>
@@ -950,6 +1088,10 @@
     if(name === "playing"){
       setPlaying(true);
     }
+    if(name === "devices"){
+      closeSheet(); closeLock();
+      refreshDeviceGlance();
+    }
     if(name === "timer"){
       // canonical demo: already deep into the final minute, so the fade
       // behaviour is visible immediately without waiting the full duration.
@@ -983,7 +1125,21 @@
     setupSuccessNote.classList.remove("is-visible");
     fieldToken.classList.remove("is-shake");
     setupHint.classList.remove("is-visible");
+    tokenInput.type = "password";
+    eyeBtn.classList.remove("is-showing");
+    eyeSwap.classList.remove("is-alt");
+    eyeBtn.setAttribute("aria-label", "Show token");
   }
+
+  /* show/hide (see/unsee) token */
+  var eyeBtn = $("eyeBtn"), eyeSwap = eyeBtn.querySelector(".icon-swap");
+  eyeBtn.addEventListener("click", function(){
+    var show = tokenInput.type === "password";
+    tokenInput.type = show ? "text" : "password";
+    eyeSwap.classList.toggle("is-alt", show);
+    eyeBtn.classList.toggle("is-showing", show);
+    eyeBtn.setAttribute("aria-label", show ? "Hide token" : "Show token");
+  });
 
   testBtn.addEventListener("click", function(){
     if(testBtn.classList.contains("is-loading")) return;
@@ -1427,8 +1583,62 @@
     showToast("Sleep timer cancelled", 1800);
   }
 
+  /* ================= DEVICES ================= */
+  var deviceRows = { mba:$("deviceMba"), mbp:$("deviceMbp") };
+  var deviceNames = { mba:"MacBook Air", mbp:"MacBook Pro" };
+  var activeDevice = "mba";
+  var mbaGlance = $("mbaGlance");
+  var deviceMini = $("deviceMini");
+  var switchTimeout = null;
+
+  function refreshDeviceGlance(){
+    mbaGlance.textContent = "battery 84% · vol " + Math.round(volume) + " · v0.1.1";
+  }
+
+  function setConnLabel(text){
+    connLabel.style.opacity = "0";
+    connLabel.style.transform = "translateY(-4px)";
+    setTimeout(function(){
+      connLabel.textContent = text;
+      connLabel.style.opacity = "1";
+      connLabel.style.transform = "translateY(0)";
+    }, 180);
+  }
+
+  function switchToDevice(id){
+    activeDevice = id;
+    Object.keys(deviceRows).forEach(function(k){
+      deviceRows[k].classList.toggle("is-active", k === id);
+    });
+    deviceRows[id].classList.remove("is-switch-pulse");
+    void deviceRows[id].offsetWidth;
+    deviceRows[id].classList.add("is-switch-pulse");
+    setConnLabel(deviceNames[id]);
+    showToast("Now controlling " + deviceNames[id], 1800);
+    clearTimeout(switchTimeout);
+    switchTimeout = setTimeout(function(){ setAppState("remote"); }, 750);
+  }
+
+  Object.keys(deviceRows).forEach(function(id){
+    deviceRows[id].addEventListener("click", function(){
+      if(activeDevice === id){ setAppState("remote"); return; }
+      switchToDevice(id);
+    });
+  });
+  deviceMini.addEventListener("click", function(){
+    deviceMini.classList.remove("is-shake");
+    void deviceMini.offsetWidth;
+    deviceMini.classList.add("is-shake");
+    showToast("Mac mini is offline", 1600);
+  });
+  $("deviceWin").addEventListener("click", function(){
+    showToast("Windows support is coming soon", 1800);
+  });
+  $("deviceAdd").addEventListener("click", function(){ setAppState("setup"); });
+  $("connBtn").addEventListener("click", function(){ setAppState("devices"); });
+
   /* ================= INIT ================= */
-  setAppState("remote");
+  setAppState("remote"); // conn label already reads "MacBook Air" in markup — no enter animation on load
 })();
 </script>
 </body>
