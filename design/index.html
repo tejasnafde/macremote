@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>macremote — pick a direction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --ink:#0d1117; --panel:#141a22; --line:#232c37; --text:#e9edf2;
+    --dim:#8b97a5; --green:#4ade80; --amber:#fbbf24; --radius:16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; background:var(--ink); color:var(--text);
+    font:16px/1.55 "Familjen Grotesk",sans-serif}
+  .wrap{max-width:640px; margin:0 auto; padding:28px 18px calc(48px + env(safe-area-inset-bottom))}
+  header h1{font-family:Fraunces,serif; font-size:clamp(28px,8vw,40px); margin:0 0 4px}
+  header h1 em{color:var(--green); font-style:normal}
+  header p{color:var(--dim); margin:0 0 26px; font-size:15px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    margin-bottom:14px; overflow:hidden; transition:border-color .25s, transform .12s}
+  .card.selected{border-color:var(--green)}
+  .card:active{transform:scale(.985)}
+  .card label{display:flex; gap:14px; padding:16px; cursor:pointer; align-items:flex-start}
+  .num{font-family:Fraunces,serif; font-size:22px; color:var(--dim); line-height:1.2; min-width:28px}
+  .card.selected .num{color:var(--green)}
+  .meta{flex:1}
+  .meta b{font-size:18px; letter-spacing:.01em}
+  .meta p{margin:3px 0 10px; color:var(--dim); font-size:14px}
+  .open{display:inline-block; font-weight:700; font-size:14px; color:var(--green);
+    text-decoration:none; border:1px solid var(--line); padding:9px 14px; border-radius:10px}
+  .open:active{background:rgba(74,222,128,.12)}
+  input[type=radio]{appearance:none; width:22px; height:22px; margin:2px 0 0;
+    border:2px solid var(--dim); border-radius:50%; flex:none; position:relative; transition:border-color .2s}
+  input[type=radio]:checked{border-color:var(--green)}
+  input[type=radio]:checked::after{content:""; position:absolute; inset:4px;
+    border-radius:50%; background:var(--green)}
+  textarea{width:100%; min-height:110px; background:var(--panel); color:var(--text);
+    border:1px solid var(--line); border-radius:var(--radius); padding:14px;
+    font:15px/1.5 "Familjen Grotesk",sans-serif; resize:vertical; margin:6px 0 16px}
+  textarea:focus{outline:none; border-color:var(--green)}
+  h2{font-size:14px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); margin:28px 0 10px}
+  .btn{display:block; width:100%; padding:16px; border-radius:14px; border:0;
+    font:700 17px "Familjen Grotesk",sans-serif; cursor:pointer; transition:transform .12s, opacity .2s}
+  .btn:active{transform:scale(.97)}
+  .btn[disabled]{opacity:.45; pointer-events:none}
+  .btn.feedback{background:var(--panel); color:var(--text); border:1px solid var(--line); margin-bottom:10px}
+  .btn.proceed{background:var(--green); color:#08130b}
+  .note{color:var(--dim); font-size:13px; text-align:center; margin-top:14px}
+  .done{display:none; text-align:center; padding:64px 12px}
+  .done .big{font-size:56px}
+  .done h3{font-family:Fraunces,serif; font-size:26px; margin:12px 0 6px}
+  .done p{color:var(--dim)}
+  .err{color:var(--amber); font-size:14px; text-align:center; margin-top:10px; display:none}
+</style>
+</head>
+<body>
+<div class="wrap" id="main">
+  <header>
+    <h1>mac<em>remote</em> · redesign</h1>
+    <p>Round 1 — five ways to think about the remote. Open each one (they're interactive — use the chip bar at the bottom to flip through all the states), pick your favorite, tell me what to change.</p>
+  </header>
+
+  <div id="options"></div>
+
+  <h2>Comments</h2>
+  <textarea id="comments" placeholder="What works, what doesn't, what to steal from the others… anything. e.g. 'Dial, but with Ledger's timer row, and bigger next/prev.'"></textarea>
+
+  <button class="btn feedback" id="sendFeedback">Send feedback → next iteration</button>
+  <button class="btn proceed" id="proceed">✳️ Proceed with this design</button>
+  <p class="err" id="err">Couldn't send — try again?</p>
+  <p class="note">Feedback → I redeploy this page with the revision → you get a Discord ping. "Proceed" greenlights implementation into the real app.</p>
+</div>
+
+<div class="done wrap" id="done">
+  <div class="big">📬</div>
+  <h3 id="doneTitle">Got it.</h3>
+  <p id="doneBody"></p>
+</div>
+
+<script>
+const ROUND = 1;
+const DIRS = [
+  ["deck",       "Deck",   "A physical remote in your hand — thumb-zone layout, volume rail, giant transport.", "mockups/deck.html"],
+  ["nowplaying", "Stage",  "A music app that controls your Mac — now-playing is the hero, system controls tucked in a tray.", "mockups/nowplaying.html"],
+  ["tiles",      "Panel",  "A control center of live tiles — glanceable dashboard, tiles expand in place, room to grow.", "mockups/tiles.html"],
+  ["console",    "Ledger", "A pro utility — dense rows, inline sliders, zero chrome, fastest scan.", "mockups/console.html"],
+  ["dial",       "Dial",   "One control you never look at — rotary volume wheel, tap to play, flick to skip.", "mockups/dial.html"],
+];
+const opts = document.getElementById("options");
+DIRS.forEach(([id,name,blurb,href],i)=>{
+  const div=document.createElement("div"); div.className="card"; div.id="card-"+id;
+  div.innerHTML=`<label>
+    <input type="radio" name="dir" value="${id}"/>
+    <span class="num">0${i+1}</span>
+    <span class="meta"><b>${name}</b><p>${blurb}</p>
+      <a class="open" href="${href}" onclick="event.stopPropagation()">Open ${name} →</a>
+    </span></label>`;
+  opts.appendChild(div);
+});
+opts.addEventListener("change",()=>{
+  document.querySelectorAll(".card").forEach(c=>c.classList.remove("selected"));
+  const sel=document.querySelector("input[name=dir]:checked");
+  if(sel) document.getElementById("card-"+sel.value).classList.add("selected");
+});
+
+async function send(action){
+  const sel=document.querySelector("input[name=dir]:checked");
+  const comments=document.getElementById("comments").value.trim();
+  if(action==="proceed" && !sel){ alert("Pick the direction to proceed with first."); return; }
+  if(action==="feedback" && !sel && !comments){ alert("Pick one or write something first."); return; }
+  document.querySelectorAll(".btn").forEach(b=>b.disabled=true);
+  document.getElementById("err").style.display="none";
+  try{
+    const r=await fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({round:ROUND, action, selected:sel?sel.value:null, comments})});
+    if(!r.ok) throw new Error(await r.text());
+    document.getElementById("main").style.display="none";
+    const done=document.getElementById("done"); done.style.display="block";
+    document.getElementById("doneTitle").textContent = action==="proceed" ? "Greenlit. Building it." : "Got it. Iterating.";
+    document.getElementById("doneBody").textContent = action==="proceed"
+      ? "Your pick is being implemented into the real app — Discord will announce the release."
+      : "A revised round will be deployed to this same URL — Discord will ping you when it's up.";
+  }catch(e){
+    document.getElementById("err").style.display="block";
+    document.querySelectorAll(".btn").forEach(b=>b.disabled=false);
+  }
+}
+document.getElementById("sendFeedback").onclick=()=>send("feedback");
+document.getElementById("proceed").onclick=()=>send("proceed");
+</script>
+</body>
+</html>

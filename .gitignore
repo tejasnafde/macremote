@@ -27,3 +27,4 @@ app/ios/
 logs/
 .idea/
 .vscode/
+design/.vercel/
