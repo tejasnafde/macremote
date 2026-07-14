@@ -9,7 +9,7 @@ if [ "${1:-}" = "--ota" ]; then
   MSG="${2:?usage: ship.sh --ota \"what changed\"}"
   REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
   cd "$REPO/app"
-  EAS_NO_VCS=1 npx eas-cli update --channel production --message "$MSG" --non-interactive
+  EAS_NO_VCS=1 npx eas-cli update --channel production --environment production --message "$MSG" --non-interactive
   echo "==> OTA published. Installed apps (v0.2.1+) pick it up on next launch."
   exit 0
 fi
