@@ -20,3 +20,9 @@ async def next_track() -> None:
 @log_timing("media.previous")
 async def previous_track() -> None:
     await asyncio.to_thread(run_hs, lua.MEDIA_PREVIOUS)
+
+
+@log_timing("media.seek")
+async def seek(delta_seconds: int) -> str:
+    """Returns which mechanism handled the seek: spotify, music, or keys."""
+    return await asyncio.to_thread(run_hs, lua.media_seek(delta_seconds))

@@ -22,6 +22,28 @@ MEDIA_PREVIOUS = (
 )
 
 
+def media_seek(delta_seconds: int) -> str:
+    """Seek by delta_seconds. Exact for Spotify and Apple Music; for anything
+    else falls back to arrow-key presses on the frontmost app (YouTube steps
+    5s per press, so |delta| >= 10 sends two presses)."""
+    d = int(delta_seconds)
+    key = "right" if d > 0 else "left"
+    presses = 1 if abs(d) < 10 else 2
+    return (
+        f"local d = {d}; "
+        "if hs.spotify and hs.spotify.isRunning() then "
+        "local st = hs.spotify.getPlaybackState(); "
+        "if st == hs.spotify.state_playing or st == hs.spotify.state_paused then "
+        "hs.spotify.setPosition(math.max(0, hs.spotify.getPosition() + d)); return 'spotify' end end; "
+        "if hs.itunes and hs.itunes.isRunning and hs.itunes.isRunning() then "
+        "local ok = hs.osascript.applescript("
+        "'tell application \"Music\" to set player position to (player position + ' .. d .. ')'); "
+        "if ok then return 'music' end end; "
+        f"for i = 1, {presses} do hs.eventtap.keyStroke({{}}, '{key}', 0) end; "
+        "return 'keys'"
+    )
+
+
 # ── Volume ─────────────────────────────────────────────────────────────────────
 # hs.audiodevice.defaultOutputDevice() controls the absolute output volume (0-100).
 
