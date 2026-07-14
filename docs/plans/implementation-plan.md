@@ -229,3 +229,10 @@ Rules for any agent working this plan:
     than the mockup's simulated live percentage.
   - Skipped the mockup's device-row "switch-pulse" animation on successful
     device switch (kept the standard press-scale feedback) for time.
+
+## P7 ship decision
+- v0.2.0 = Deck UI + multi-device + sleep-timer pause/restore + banish-cursor
+  + style sweep + CI caching, on purged history.
+- EAS OTA deferred to v0.2.1: this release carries native deps (must be an
+  APK regardless); expo-updates wiring lands as the immediate next change so
+  every JS-only fix after it ships over the air.
