@@ -72,7 +72,7 @@ Rules for any agent working this plan:
 - [x] Self-update: `lib/updater.ts` (isNewer semver) + `lib/apk.ts`
       (download GitHub release asset → install intent), adapted from scout
 - [x] Widget: ⏮ ▶️ ⏭ 🔉 🔊 via react-native-android-widget, headless HTTP
-- [ ] App icon: new flat ⌘+play mark (SVG in docs/brand/), adaptive icon set
+- [x] App icon: new flat ⌘+play mark (SVG in docs/brand/), adaptive icon set
       — placeholder flat dark icon + adaptive set generated directly as PNGs
       in `app/assets/`; no SVG in docs/brand/ yet, final brand icon pending.
 - [ ] Acceptance: `npm run typecheck` green; APK builds in release workflow.
