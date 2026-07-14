@@ -15,24 +15,24 @@ Rules for any agent working this plan:
       `ANDROID_KEYSTORE_B64` + password/alias secrets
 
 ## P1 — Server core (pure Python, no Mac deps; pytest green = done)
-- [ ] `server/` scaffold: `pyproject.toml` (uv), `main.py`, layered dirs
-- [ ] `config/settings.py` — pydantic-settings: `APP_ENV`, `API_TOKEN`,
+- [x] `server/` scaffold: `pyproject.toml` (uv), `main.py`, layered dirs
+- [x] `config/settings.py` — pydantic-settings: `APP_ENV`, `API_TOKEN`,
       `DISCORD_WEBHOOK_URL`, `HS_BIN` (path to hs CLI, default `/opt/homebrew/bin/hs`),
       `PORT` (8484), `VOLUME_STEP` (6), `LOG_DIR`
-- [ ] `app_util/log_util.py` — dev/JSON formatters + rotating file handler
-- [ ] `common_helper/discord_alert.py` — `alert()`, `send_lifecycle()`; httpx
+- [x] `app_util/log_util.py` — dev/JSON formatters + rotating file handler
+- [x] `common_helper/discord_alert.py` — `alert()`, `send_lifecycle()`; httpx
       async, 5s timeout, no-op if unset, never raises
-- [ ] `common_helper/decorators.py` — `@log_timing`
-- [ ] `common_helper/hs_bridge.py` — `run_hs(lua: str) -> str` via subprocess
+- [x] `common_helper/decorators.py` — `@log_timing`
+- [x] `common_helper/hs_bridge.py` — `run_hs(lua: str) -> str` via subprocess
       (`HS_BIN -c`), 5s timeout, raises `HSError` on failure
-- [ ] Routers+handlers: media, volume (incl. `PUT /volume`), brightness,
+- [x] Routers+handlers: media, volume (incl. `PUT /volume`), brightness,
       system (lock/sleep), sleep_timer (asyncio task, fade last 60s, cancel,
       remaining), status (now-playing, volume, brightness, battery, timer),
       health/version (version read from `server/VERSION`)
-- [ ] Bearer-token dependency on all routers except health/version
-- [ ] Error middleware: log + Discord + `{"error": ...}` JSON; startup event →
+- [x] Bearer-token dependency on all routers except health/version
+- [x] Error middleware: log + Discord + `{"error": ...}` JSON; startup event →
       Discord "server online vX.Y.Z"
-- [ ] Tests: fake `hs` script fixture; auth (401/200), every endpoint happy path,
+- [x] Tests: fake `hs` script fixture; auth (401/200), every endpoint happy path,
       hs failure → 502 + alert called, sleep-timer set/cancel/expiry (fast clock),
       status shape. Acceptance: `uv run pytest` green.
 
