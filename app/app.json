@@ -57,6 +57,22 @@
       ],
       "expo-build-properties",
       "expo-font"
-    ]
+    ],
+    "owner": "tejasnafde",
+    "extra": {
+      "eas": {
+        "projectId": "2ba4d441-8e0a-4e60-b82b-192fd12d191d"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2ba4d441-8e0a-4e60-b82b-192fd12d191d",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      },
+      "checkAutomatically": "ON_LOAD"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
   }
 }

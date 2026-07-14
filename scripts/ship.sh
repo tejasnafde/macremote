@@ -3,7 +3,18 @@
 # (tests -> signed APK -> GitHub Release -> Discord notification).
 set -euo pipefail
 
-V="${1:?usage: ship.sh X.Y.Z}"
+# OTA fast lane: ship.sh --ota "message"  (JS-only changes, live in ~1 min.
+# Native/dep/config changes still need a full X.Y.Z release.)
+if [ "${1:-}" = "--ota" ]; then
+  MSG="${2:?usage: ship.sh --ota \"what changed\"}"
+  REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  cd "$REPO/app"
+  EAS_NO_VCS=1 npx eas-cli update --channel production --message "$MSG" --non-interactive
+  echo "==> OTA published. Installed apps (v0.2.1+) pick it up on next launch."
+  exit 0
+fi
+
+V="${1:?usage: ship.sh X.Y.Z  |  ship.sh --ota \"message\"}"
 [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must be X.Y.Z"; exit 1; }
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
