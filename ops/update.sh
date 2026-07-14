@@ -25,7 +25,7 @@ trap 'rmdir "$LOCKDIR"' EXIT
 
 cd "$REPO"
 CURRENT="$(cat server/VERSION)"
-git fetch --tags --quiet origin || exit 0
+git fetch --tags --force --quiet origin || exit 0
 LATEST_TAG="$(git tag -l 'v*' --sort=-v:refname | head -1)"
 [ -n "$LATEST_TAG" ] || exit 0
 LATEST="${LATEST_TAG#v}"
