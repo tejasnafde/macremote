@@ -80,7 +80,11 @@ else
   bad "sleep-timer flow (set $C, remaining '$REMAIN', delete $CD, after '$AFTER')"
 fi
 
-# 9. destructive (opt-in)
+# 9. cursor banish (harmless: parks the pointer in the corner)
+C="$(code -X POST "$BASE/system/banish-cursor")"
+[ "$C" = 200 ] && ok "system banish-cursor 200" || bad "system banish-cursor ($C)"
+
+# 10. destructive (opt-in)
 if [ "$DESTRUCTIVE" = "--destructive" ]; then
   C="$(code -X POST "$BASE/system/lock")"
   [ "$C" = 200 ] && ok "system lock 200 (screen should be locked!)" || bad "system lock ($C)"
