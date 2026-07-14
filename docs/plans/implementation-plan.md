@@ -37,17 +37,17 @@ Rules for any agent working this plan:
       status shape. Acceptance: `uv run pytest` green.
 
 ## P2 — Mac integration (this Mac; e2e green = done)
-- [ ] `hammerspoon/macremote.lua` + loader line in `~/.hammerspoon/init.lua`;
+- [x] `hammerspoon/macremote.lua` + loader line in `~/.hammerspoon/init.lua`;
       enable `hs.ipc` CLI install
 - [x] `server/.env` created locally (API token generated, Discord webhook from user)
-- [ ] `ops/io.macremote.server.plist` + `ops/install.sh` (idempotent): uv sync,
+- [x] `ops/io.macremote.server.plist` + `ops/install.sh` (idempotent): uv sync,
       install plists into `~/Library/LaunchAgents`, bootstrap service, open
       Hammerspoon once
-- [ ] `scripts/e2e_mac.sh`: hits every endpoint on the live service; verifies
+- [x] `scripts/e2e_mac.sh`: hits every endpoint on the live service; verifies
       volume set/readback via `osascript -e 'output volume of (get volume settings)'`;
       verifies auth rejection; verifies /status fields; 60s sleep-timer set+cancel.
       Acceptance: script exits 0 on this Mac; "server online" embed seen in Discord.
-- [ ] MANUAL (user): grant Hammerspoon Accessibility permission when prompted.
+- [x] MANUAL (user): grant Hammerspoon Accessibility permission when prompted.
       Media-key assertions are skipped (warn) until granted, then re-run.
 
 ## P3 — CI + release pipeline
