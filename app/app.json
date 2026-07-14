@@ -31,6 +31,14 @@
     },
     "plugins": [
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
         "react-native-android-widget",
         {
           "widgets": [
@@ -46,7 +54,8 @@
             }
           ]
         }
-      ]
+      ],
+      "expo-build-properties"
     ]
   }
 }
