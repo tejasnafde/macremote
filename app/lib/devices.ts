@@ -26,8 +26,21 @@ const EMPTY_STATE: DevicesState = { devices: [], activeId: null };
  * returns a fetch-ready URL with no trailing slash.
  */
 export function normalizeServerUrl(input: string): string {
-  const trimmed = input.trim().replace(/\/+$/, '');
+  // Collapse malformed protocol slashes first ("http:/x", "http:///x" -> "http://x"),
+  // otherwise the http:// prefix below double-wraps them into a dead URL.
+  const trimmed = input
+    .trim()
+    .replace(/^(https?):\/+/i, '$1://')
+    .replace(/\/+$/, '');
   return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
+/** A device is usable only if its URL has a real host (not a mangled protocol). */
+export function isValidDeviceUrl(url: string | undefined): boolean {
+  const m = (url ?? '').match(/^https?:\/\/([^\s/:]+)/i);
+  if (!m) return false;
+  const host = m[1].toLowerCase();
+  return host.length > 0 && host !== 'http' && host !== 'https';
 }
 
 /** Best-effort hostname for naming a freshly-migrated or freshly-added device. */
@@ -36,9 +49,13 @@ export function hostnameFromUrl(url: string): string {
   try {
     // React Native's URL global covers this in modern Hermes; fall back to a
     // manual strip if it's ever unavailable for a malformed input.
-    return new URL(/^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`).hostname;
+    const name = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`).hostname;
+    if (name && name !== 'http' && name !== 'https') return name;
+    throw new Error('bad hostname');
   } catch {
-    return trimmed.replace(/^https?:\/\//, '').split(/[/:]/)[0] || 'Mac';
+    // Strip any protocol-ish prefix (including malformed "http:/") before splitting.
+    const host = trimmed.replace(/^https?:\/+/i, '').split(/[/:]/)[0];
+    return host && host !== 'http' && host !== 'https' ? host : 'My Mac';
   }
 }
 
@@ -57,10 +74,12 @@ async function migrateLegacyIfNeeded(state: DevicesState): Promise<DevicesState>
   migrationChecked = true;
   const legacy = await getLegacyServerConfig();
   if (!legacy.serverUrl || !legacy.token) return state;
+  const url = normalizeServerUrl(legacy.serverUrl);
+  if (!isValidDeviceUrl(url)) return state; // unmigratable garbage: user re-adds manually
   const device: Device = {
     id: makeId(),
     name: hostnameFromUrl(legacy.serverUrl),
-    url: normalizeServerUrl(legacy.serverUrl),
+    url,
     token: legacy.token.trim(),
   };
   const migrated: DevicesState = { devices: [device], activeId: device.id };
@@ -68,10 +87,22 @@ async function migrateLegacyIfNeeded(state: DevicesState): Promise<DevicesState>
   return migrated;
 }
 
+/** Drop any device whose URL is unusable (e.g. a mangled migration artifact). */
+async function sanitize(state: DevicesState): Promise<DevicesState> {
+  const devices = state.devices.filter((d) => isValidDeviceUrl(d.url));
+  if (devices.length === state.devices.length) return state;
+  const activeId = devices.some((d) => d.id === state.activeId)
+    ? state.activeId
+    : (devices[0]?.id ?? null);
+  const cleaned = { devices, activeId };
+  await persist(cleaned);
+  return cleaned;
+}
+
 async function read(): Promise<DevicesState> {
   const raw = await AsyncStorage.getItem(DEVICES_KEY);
   const parsed: DevicesState = raw ? JSON.parse(raw) : EMPTY_STATE;
-  return migrateLegacyIfNeeded(parsed);
+  return sanitize(await migrateLegacyIfNeeded(parsed));
 }
 
 export async function getDevicesState(): Promise<DevicesState> {
@@ -104,6 +135,16 @@ export async function setActiveDevice(id: string): Promise<void> {
   const state = await read();
   if (!state.devices.some((d) => d.id === id)) return;
   await persist({ ...state, activeId: id });
+}
+
+export async function renameDevice(id: string, name: string): Promise<void> {
+  const state = await read();
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  await persist({
+    ...state,
+    devices: state.devices.map((d) => (d.id === id ? { ...d, name: trimmed } : d)),
+  });
 }
 
 export async function removeDevice(id: string): Promise<void> {

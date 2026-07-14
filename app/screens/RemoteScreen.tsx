@@ -90,13 +90,24 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const trackToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const timerGraceUntil = useRef(0);
+
   const refreshStatus = useCallback(async () => {
     try {
       const s = await api.status();
       setStatus(s);
       setOnline(true);
-      setOptimisticPlaying(null);
-      if (s.sleep_timer) setOptimisticSleepSeconds(null);
+      // Browser playback reports no now-playing state, so only let the server
+      // override the optimistic play/pause icon when it actually knows.
+      if (s.now_playing?.state) setOptimisticPlaying(null);
+      // Reconcile the timer pill with server truth on every poll; the short
+      // grace window covers the beat between arming and the server reporting it.
+      if (s.sleep_timer) {
+        setOptimisticSleepSeconds(null);
+        timerGraceUntil.current = 0;
+      } else if (Date.now() > timerGraceUntil.current) {
+        setOptimisticSleepSeconds(null);
+      }
     } catch {
       setOnline(false);
     }
@@ -304,6 +315,7 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   const sleepRemaining = optimisticSleepSeconds ?? status?.sleep_timer?.remaining_seconds ?? null;
 
   async function handleArmTimer(minutes: number) {
+    timerGraceUntil.current = Date.now() + 8000;
     setOptimisticSleepSeconds(minutes * 60);
     try {
       await api.setSleepTimer(minutes);
@@ -315,6 +327,7 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
     }
   }
   async function handleCancelTimer() {
+    timerGraceUntil.current = 0;
     setOptimisticSleepSeconds(null);
     setSheetOpen(false);
     try {

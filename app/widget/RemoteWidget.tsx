@@ -13,7 +13,10 @@ const ICON = '#f3f5f1'; // theme.colors.off
 
 const SVG_PREV = `<svg viewBox="0 0 24 24" fill="none"><path d="M18 4.5v15l-10-7.5z" fill="${ICON}"/><rect x="4.6" y="4.5" width="2.4" height="15" rx="1" fill="${ICON}"/></svg>`;
 const SVG_NEXT = `<svg viewBox="0 0 24 24" fill="none"><path d="M6 4.5v15l10-7.5z" fill="${ICON}"/><rect x="17" y="4.5" width="2.4" height="15" rx="1" fill="${ICON}"/></svg>`;
-const SVG_PLAY_PAUSE = `<svg viewBox="0 0 24 24" fill="none"><rect x="6" y="4" width="4.4" height="16" rx="1.6" fill="${ICON}"/><rect x="13.6" y="4" width="4.4" height="16" rx="1.6" fill="${ICON}"/></svg>`;
+// Combined play/pause glyph: a headless widget cannot know the Mac's real
+// playback state, so the icon claims neither (the old pause-only glyph read
+// as "stuck on pause").
+const SVG_PLAY_PAUSE = `<svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5v13l9-6.5z" fill="${ICON}"/><rect x="15" y="5.5" width="2.6" height="13" rx="1.2" fill="${ICON}"/><rect x="19.4" y="5.5" width="2.6" height="13" rx="1.2" fill="${ICON}"/></svg>`;
 const SVG_VOLUME = `<svg viewBox="0 0 24 24" fill="none"><path d="M4 9.6v4.8h3.4L12.5 19V5l-5.1 4.6H4Z" stroke="${ICON}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.4 9.2a4.2 4.2 0 0 1 0 5.6" stroke="${ICON}" stroke-width="1.6" stroke-linecap="round"/></svg>`;
 
 interface WidgetButtonProps {

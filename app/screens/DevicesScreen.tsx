@@ -4,7 +4,7 @@
 // pulled live from /status, tap-to-switch, a dashed "Windows support, soon"
 // teaser row, and "+ Add device" into the Setup flow.
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,7 +16,14 @@ import { PressableScale } from '../components/PressableScale';
 import { IconPlus, IconWindows } from '../components/icons';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
-import { Device, getDevicesState, probeDevice, setActiveDevice } from '../lib/devices';
+import {
+  Device,
+  getDevicesState,
+  probeDevice,
+  removeDevice,
+  renameDevice,
+  setActiveDevice,
+} from '../lib/devices';
 import { colors, fonts, radii, spacing } from '../theme';
 
 interface RowState {
@@ -75,6 +82,44 @@ export function DevicesScreen({
     refresh();
   }, [refresh]);
 
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+
+  function handleLongPress(device: Device) {
+    Alert.alert(device.name, undefined, [
+      { text: 'Rename', onPress: () => setRenaming({ id: device.id, name: device.name }) },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Remove device', `Stop controlling ${device.name}?`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Remove',
+              style: 'destructive',
+              onPress: async () => {
+                await removeDevice(device.id);
+                const state = await getDevicesState();
+                if (state.devices.length === 0) {
+                  onAddDevice();
+                  return;
+                }
+                toast.show(`${device.name} removed`, 1600);
+                refresh();
+              },
+            },
+          ]),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  async function handleRenameSave() {
+    if (!renaming) return;
+    await renameDevice(renaming.id, renaming.name);
+    setRenaming(null);
+    refresh();
+  }
+
   async function handleSwitch(device: Device) {
     const state = rowState[device.id];
     if (device.id === activeId) {
@@ -107,8 +152,29 @@ export function DevicesScreen({
           state={rowState[device.id]}
           glance={device.id === activeId ? glance : null}
           onPress={() => handleSwitch(device)}
+          onLongPress={() => handleLongPress(device)}
         />
       ))}
+
+      {renaming && (
+        <View style={styles.renameBar}>
+          <TextInput
+            style={styles.renameInput}
+            value={renaming.name}
+            onChangeText={(name) => setRenaming({ ...renaming, name })}
+            autoFocus
+            selectTextOnFocus
+            placeholder="Device name"
+            placeholderTextColor={colors.off38}
+          />
+          <PressableScale style={styles.renameBtn} onPress={handleRenameSave}>
+            <Text style={styles.renameBtnText}>Save</Text>
+          </PressableScale>
+          <PressableScale style={[styles.renameBtn, styles.renameCancel]} onPress={() => setRenaming(null)}>
+            <Text style={styles.renameCancelText}>Cancel</Text>
+          </PressableScale>
+        </View>
+      )}
 
       <PressableScale style={[styles.row, styles.teaserRow]} onPress={() => toast.show('Windows support is coming soon', 1800)}>
         <IconWindows size={20} color={colors.off38} />
@@ -135,12 +201,14 @@ function DeviceRow({
   state,
   glance,
   onPress,
+  onLongPress,
 }: {
   device: Device;
   isActive: boolean;
   state: RowState | undefined;
   glance: string | null;
   onPress: () => void;
+  onLongPress: () => void;
 }) {
   const shakeX = useSharedValue(0);
   const isOffline = state && !state.probing && !state.online;
@@ -169,6 +237,7 @@ function DeviceRow({
       <PressableScale
         style={[styles.row, isActive && styles.rowActive, isOffline && styles.rowOffline]}
         onPress={handlePress}
+        onLongPress={onLongPress}
       >
         {state?.probing ? (
           <ActivityIndicator size="small" color={colors.off38} />
@@ -246,4 +315,32 @@ const styles = StyleSheet.create({
     minHeight: 58,
   },
   addLabel: { fontFamily: fonts.bold, fontSize: 14, color: colors.off72 },
+  renameBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.gap,
+    marginTop: spacing.gap,
+    padding: spacing.gap,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.ink850,
+  },
+  renameInput: {
+    flex: 1,
+    fontFamily: fonts.body,
+    fontSize: 15,
+    color: colors.off,
+    paddingVertical: 8,
+    paddingHorizontal: spacing.gap,
+  },
+  renameBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: radii.sm,
+    backgroundColor: colors.green,
+  },
+  renameBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink950 },
+  renameCancel: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.line },
+  renameCancelText: { fontFamily: fonts.bold, fontSize: 13, color: colors.off72 },
 });
