@@ -129,3 +129,10 @@ Rules for any agent working this plan:
 - Current: fade volume → system sleep (volume left faded after wake).
 - Change with redesign release: fade → send media pause → restore volume to
   pre-fade level → system sleep. Server-side change in sleep_timer_handler.
+
+## External display brightness (user Q, design round 2) - v0.2.x candidate
+- DDC/CI via `m1ddc` (brew, open source) for external monitors on Apple Silicon;
+  keep hs.brightness for the built-in panel. Server: GET /displays
+  (hs.screen.allScreens enumeration) + per-display brightness endpoints.
+  App: display-aware brightness control when >1 screen. Caveat: DDC support
+  varies by monitor/cable; degrade gracefully to built-in-only.
