@@ -124,3 +124,8 @@ Rules for any agent working this plan:
   macremote server); app aggregates. /status could add hostname/device name.
 - Future: Windows agent (Python server + pycaw/keyboard shims instead of
   Hammerspoon) — same API contract, so the app treats it identically.
+
+## Sleep-timer refinement (user Q, design round 1)
+- Current: fade volume → system sleep (volume left faded after wake).
+- Change with redesign release: fade → send media pause → restore volume to
+  pre-fade level → system sleep. Server-side change in sleep_timer_handler.
