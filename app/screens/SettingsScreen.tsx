@@ -44,9 +44,10 @@ export function SettingsScreen() {
   }
 
   async function testConnection() {
-    await setServerConfig({ serverUrl, token });
+    if (connection === 'testing') return; // single-flight: rapid taps otherwise queue overlapping tests
     setConnection('testing');
     setConnectionMessage('');
+    await setServerConfig({ serverUrl, token });
     try {
       await api.health();
       await api.status();
@@ -59,6 +60,7 @@ export function SettingsScreen() {
   }
 
   async function manualUpdateCheck() {
+    if (updateState === 'checking') return;
     setUpdateState('checking');
     const latest = await checkForUpdate(true);
     if (!latest) {
