@@ -15,3 +15,8 @@ async def lock() -> None:
 @log_timing("system.sleep")
 async def sleep() -> None:
     await asyncio.to_thread(run_hs, lua.SLEEP)
+
+
+@log_timing("system.banish_cursor")
+async def banish_cursor() -> None:
+    await asyncio.to_thread(run_hs, lua.CURSOR_BANISH)

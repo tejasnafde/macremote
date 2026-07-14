@@ -20,3 +20,10 @@ async def lock() -> dict:
 async def sleep() -> dict:
     await system_handler.sleep()
     return {"ok": True}
+
+
+@router.post("/banish-cursor")
+async def banish_cursor() -> dict:
+    """Park the pointer in the corner: fixes the stuck cursor over fullscreen video."""
+    await system_handler.banish_cursor()
+    return {"ok": True}

@@ -72,6 +72,15 @@ def brightness_down(step: int) -> str:
 LOCK = "hs.caffeinate.lockScreen()"
 SLEEP = "hs.caffeinate.systemSleep()"
 
+# Park the pointer in the bottom-right corner of the main screen. The movement
+# re-arms video players' cursor auto-hide (fixes the stuck cursor after
+# app-switching back into a fullscreen video) and leaves the pointer out of
+# the way in the meantime.
+CURSOR_BANISH = (
+    "local f = hs.screen.mainScreen():fullFrame(); "
+    "hs.mouse.absolutePosition({x = f.x + f.w - 2, y = f.y + f.h - 2})"
+)
+
 
 # ── Status ─────────────────────────────────────────────────────────────────────
 # A single Lua expression returning a JSON string (hs.json.encode) with volume,
