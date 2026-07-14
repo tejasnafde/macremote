@@ -28,3 +28,8 @@ logs/
 .idea/
 .vscode/
 design/.vercel/
+
+# Third-party agent skill installs (local tooling, not project code)
+.claude/
+.agents/
+.github/skills/
