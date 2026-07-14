@@ -51,13 +51,13 @@ Rules for any agent working this plan:
       Media-key assertions are skipped (warn) until granted, then re-run.
 
 ## P3 — CI + release pipeline
-- [ ] `.github/workflows/ci.yml`: on push/PR — server pytest; app `tsc --noEmit`
+- [x] `.github/workflows/ci.yml`: on push/PR — server pytest; app `tsc --noEmit`
       (once app exists). Failure → Discord notify (curl, secret webhook).
-- [ ] `.github/workflows/release.yml`: on tag `v*` — run tests; `npx expo prebuild
+- [x] `.github/workflows/release.yml`: on tag `v*` — run tests; `npx expo prebuild
       --platform android`; Gradle `assembleRelease` signed with keystore from
       secrets; `gh release create` with APK asset; Discord embed with direct
       download link + version + changelog snippet.
-- [ ] `scripts/ship.sh`: bump `server/VERSION` + `app/app.json` version, commit,
+- [x] `scripts/ship.sh`: bump `server/VERSION` + `app/app.json` version, commit,
       tag, push (merge-pull first if behind). Acceptance: test tag `v0.0.1`
       produces a GitHub Release with signed APK and a Discord notification.
 

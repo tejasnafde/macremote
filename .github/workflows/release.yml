@@ -26,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so release notes span prev-tag..tag
       - uses: actions/setup-node@v4
         with:
           node-version: 20
