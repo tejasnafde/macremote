@@ -50,6 +50,11 @@ VOLUME_MUTE_TOGGLE = (
     "local d = hs.audiodevice.defaultOutputDevice(); d:setMuted(not d:muted())"
 )
 
+VOLUME_GET = (
+    "local d = hs.audiodevice.defaultOutputDevice(); "
+    "return tostring(math.floor((d:outputVolume() or 0) + 0.5))"
+)
+
 
 # ── Brightness ─────────────────────────────────────────────────────────────────
 # hs.brightness.get()/set() operate on 0-100.

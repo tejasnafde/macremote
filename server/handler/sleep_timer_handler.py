@@ -2,12 +2,15 @@
 
 Schedules the Mac to sleep `minutes` from now. Over the final FADE_WINDOW_SECONDS
 seconds it fades volume down in FADE_STEPS steps via the Hammerspoon bridge, then
-sends the sleep command and fires a Discord lifecycle alert.
+PAUSES the media, RESTORES the pre-fade volume (so the Mac wakes at normal
+loudness with a paused player), sends the sleep command, and fires a Discord
+lifecycle alert.
 
 Delays and the hs/alert calls are injectable so tests can run this instantly.
 """
 
 import asyncio
+import json
 import time
 
 from app_util.log_util import errorlogger, infologger
@@ -60,6 +63,14 @@ class SleepTimerService:
             if pre_fade > 0:
                 await self._sleep(pre_fade)
 
+            # Remember the pre-fade volume so we can restore it before sleeping.
+            orig_volume: int | None = None
+            try:
+                raw = await asyncio.to_thread(self._run_hs, lua.VOLUME_GET)
+                orig_volume = int(float(raw))
+            except (HSError, ValueError) as exc:
+                errorlogger.error(f"sleep_timer | volume readback failed | {exc}")
+
             step_interval = fade_window / FADE_STEPS if FADE_STEPS else 0
             for _ in range(FADE_STEPS):
                 try:
@@ -68,6 +79,31 @@ class SleepTimerService:
                     errorlogger.error(f"sleep_timer | fade step failed | {exc}")
                 if step_interval:
                     await self._sleep(step_interval)
+
+            # Pause the media unless status explicitly says it's already
+            # paused/stopped (browser playback reports no state -> still pause;
+            # falling asleep to media is the whole point of this timer).
+            try:
+                should_pause = True
+                try:
+                    status_raw = await asyncio.to_thread(self._run_hs, lua.STATUS)
+                    np = json.loads(status_raw).get("nowplaying") or {}
+                    state = str(np.get("state") or "").lower()
+                    if "paus" in state or "stop" in state:
+                        should_pause = False
+                except (HSError, ValueError, json.JSONDecodeError):
+                    pass  # unknown state -> pause anyway
+                if should_pause:
+                    await asyncio.to_thread(self._run_hs, lua.MEDIA_PLAYPAUSE)
+            except HSError as exc:
+                errorlogger.error(f"sleep_timer | media pause failed | {exc}")
+
+            # Restore volume so the Mac wakes at normal loudness (player is paused).
+            if orig_volume is not None:
+                try:
+                    await asyncio.to_thread(self._run_hs, lua.volume_set(orig_volume))
+                except HSError as exc:
+                    errorlogger.error(f"sleep_timer | volume restore failed | {exc}")
 
             try:
                 await asyncio.to_thread(self._run_hs, lua.SLEEP)
