@@ -296,3 +296,15 @@ or `app.json` change, no new dependencies.
       non-builtin display.
 - [x] Acceptance: `npm run typecheck` green; `npx expo export --platform
       android` bundles clean. No `app.json`/`package.json` diff.
+
+## v0.3 scope (user requests, 2026-07-15 late night)
+- Browser extension bridge (Firefox + Chromium): audible tabs list, per-tab
+  play/pause/focus, browser now-playing in /status.
+- Reading mode: trackpad-like control for manga/light novels in browser AND
+  Readest.app (confirmed installed). Lazy path: a generic input surface, not
+  per-app integration. Server: POST /input/scroll {dx,dy} via
+  hs.eventtap.newScrollEvent, POST /input/key {key} for arrows/page/space.
+  App: a swipe/drag gesture pad screen (drag = scroll, tap zones = page turn).
+  Covers browser scrolling and Readest page turns with one feature.
+- Widget play/pause: consider optimistic icon flip via stored flag if the
+  combined glyph feels off.
