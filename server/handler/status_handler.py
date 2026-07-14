@@ -17,5 +17,11 @@ async def get_status() -> dict:
     except json.JSONDecodeError as exc:
         raise HSError(f"hs returned non-JSON status: {raw!r}") from exc
 
-    data["sleep_timer_remaining_seconds"] = sleep_timer_service.remaining_seconds()
+    # Canonical wire shape (shared with the Android app):
+    # now_playing: {app,title,artist,state}|null ; sleep_timer: {remaining_seconds}|null
+    data["now_playing"] = data.pop("nowplaying", None)
+    remaining = sleep_timer_service.remaining_seconds()
+    data["sleep_timer"] = (
+        {"remaining_seconds": remaining} if remaining is not None else None
+    )
     return data

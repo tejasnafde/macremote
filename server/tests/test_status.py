@@ -21,8 +21,9 @@ def test_status_shape(client, fake_hs):
     assert body["muted"] is False
     assert body["brightness"] == 80
     assert body["battery"] == 73
-    assert body["nowplaying"] == canned["nowplaying"]
-    assert body["sleep_timer_remaining_seconds"] is None
+    assert body["now_playing"] == canned["nowplaying"]
+    assert "nowplaying" not in body
+    assert body["sleep_timer"] is None
     assert "macremote.nowPlaying" in fake_hs.calls[0]
 
 
@@ -33,7 +34,7 @@ def test_status_null_nowplaying(client, fake_hs):
     resp = client.get("/status", headers=AUTH_HEADERS)
 
     assert resp.status_code == 200
-    assert resp.json()["nowplaying"] is None
+    assert resp.json()["now_playing"] is None
 
 
 def test_status_hs_bad_json_returns_502(client, fake_hs, monkeypatch):

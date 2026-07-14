@@ -9,7 +9,7 @@ def test_set_sleep_timer(client, fake_hs):
     assert sleep_timer_service.is_active()
 
     status_resp = client.get("/status", headers=AUTH_HEADERS)
-    remaining = status_resp.json()["sleep_timer_remaining_seconds"]
+    remaining = (status_resp.json()["sleep_timer"] or {}).get("remaining_seconds")
     assert remaining is not None
     assert 0 < remaining <= 5 * 60
 
@@ -24,7 +24,7 @@ def test_cancel_sleep_timer(client, fake_hs):
     assert not sleep_timer_service.is_active()
 
     status_resp = client.get("/status", headers=AUTH_HEADERS)
-    assert status_resp.json()["sleep_timer_remaining_seconds"] is None
+    assert status_resp.json()["sleep_timer"] is None
 
 
 def test_cancel_sleep_timer_when_none_active(client, fake_hs):
