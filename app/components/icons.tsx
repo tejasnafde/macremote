@@ -1,7 +1,7 @@
 // Vector icon set ported from the inline SVGs in design/mockups/deck.html —
 // no emoji, no icon-font UI kit, just the mockup's own path data rendered
 // with react-native-svg so every glyph matches the approved design exactly.
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 export interface IconProps {
   size?: number;
@@ -42,6 +42,36 @@ export function IconNext({ size = 24, color = '#f3f5f1' }: IconProps) {
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M6 4.5v15l10-7.5z" fill={color} />
       <Rect x={17} y={4.5} width={2.4} height={15} rx={1} fill={color} />
+    </Svg>
+  );
+}
+
+// Seek 10s icons: IconRefresh's circular-arrow-plus-arrowhead shape (already
+// approved for this stroke weight), mirrored for "back" via a <G> transform
+// so the arrowhead reads as rewind vs fast-forward, with a small "10" set as
+// real SVG text (not a hand-drawn digit path) centered in the loop.
+export function IconSeekForward10({ size = 27, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M20 11a8 8 0 1 0-2.3 5.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M20 5v6h-6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+      <SvgText x={12} y={15.6} fontSize={8.5} fontWeight="800" fill={color} textAnchor="middle">
+        10
+      </SvgText>
+    </Svg>
+  );
+}
+
+export function IconSeekBack10({ size = 27, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <G transform="scale(-1,1) translate(-24,0)">
+        <Path d="M20 11a8 8 0 1 0-2.3 5.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M20 5v6h-6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+      </G>
+      <SvgText x={12} y={15.6} fontSize={8.5} fontWeight="800" fill={color} textAnchor="middle">
+        10
+      </SvgText>
     </Svg>
   );
 }
