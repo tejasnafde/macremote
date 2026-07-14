@@ -26,6 +26,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
       - name: Typecheck app
         run: |
           if [ -f app/package.json ]; then
