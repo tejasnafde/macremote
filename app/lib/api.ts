@@ -1,8 +1,9 @@
 // Typed client for the macremote FastAPI server (see
 // docs/plans/2026-07-15-macremote-design.md for the API surface). Base URL
-// and bearer token come from AsyncStorage (see lib/storage.ts) so both the
-// foreground app and the headless widget task handler can share them.
-import { getServerConfig } from './storage';
+// and bearer token come from the ACTIVE device (see lib/devices.ts) so both
+// the foreground app and the headless widget task handler always drive
+// whichever Mac the user last switched to.
+import { getActiveDevice, normalizeServerUrl } from './devices';
 
 const TIMEOUT_MS = 4000;
 
@@ -48,23 +49,22 @@ export interface VersionResponse {
   version: string;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const { serverUrl, token } = await getServerConfig();
-  if (!serverUrl) {
-    throw new ApiError('Server URL is not configured', 'not-configured');
-  }
-
+async function requestWithConfig<T>(
+  cfg: { url: string; token: string },
+  path: string,
+  init?: RequestInit
+): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   let res: Response;
   try {
-    res = await fetch(`${serverUrl}${path}`, {
+    res = await fetch(`${cfg.url}${path}`, {
       ...init,
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(cfg.token ? { Authorization: `Bearer ${cfg.token}` } : {}),
         ...(init?.headers ?? {}),
       },
     });
@@ -82,9 +82,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {
-      const hint = token
-        ? `API token rejected by the server (sent ${token.length} chars). Re-paste it from your server/.env — no backticks or spaces.`
-        : 'No API token saved — paste it in Settings and hit Save.';
+      const hint = cfg.token
+        ? `API token rejected by the server (sent ${cfg.token.length} chars). Re-paste it from your server/.env, no backticks or spaces.`
+        : 'No API token saved. Paste it in the device setup screen and save.';
       throw new ApiError(hint, 'http', res.status);
     }
     throw new ApiError(`HTTP ${res.status} on ${path}`, 'http', res.status);
@@ -94,6 +94,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return undefined as T;
   }
   return (await res.json()) as T;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const device = await getActiveDevice();
+  if (!device) {
+    throw new ApiError('No device is set up yet', 'not-configured');
+  }
+  return requestWithConfig<T>({ url: device.url, token: device.token }, path, init);
 }
 
 export const api = {
@@ -112,6 +120,8 @@ export const api = {
 
   lock: (): Promise<void> => request('/system/lock', { method: 'POST' }),
   sleep: (): Promise<void> => request('/system/sleep', { method: 'POST' }),
+  /** Parks the Mac's pointer in the screen corner (stuck-cursor-over-fullscreen-video fix). */
+  banishCursor: (): Promise<void> => request('/system/banish-cursor', { method: 'POST' }),
 
   setSleepTimer: (minutes: number): Promise<void> =>
     request('/sleep-timer', { method: 'POST', body: JSON.stringify({ minutes }) }),
@@ -121,3 +131,14 @@ export const api = {
   health: (): Promise<HealthResponse> => request<HealthResponse>('/health'),
   version: (): Promise<VersionResponse> => request<VersionResponse>('/version'),
 };
+
+/**
+ * Probe an as-yet-unsaved url/token pair (Setup screen's "Test Connection").
+ * Bypasses the active-device lookup entirely so it works before the device
+ * is added to storage.
+ */
+export async function testConnection(url: string, token: string): Promise<void> {
+  const cfg = { url: normalizeServerUrl(url), token: token.trim() };
+  await requestWithConfig<HealthResponse>(cfg, '/health');
+  await requestWithConfig<StatusResponse>(cfg, '/status');
+}
