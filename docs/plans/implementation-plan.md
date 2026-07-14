@@ -258,3 +258,41 @@ Rules for any agent working this plan:
 - EAS OTA deferred to v0.2.1: this release carries native deps (must be an
   APK regardless); expo-updates wiring lands as the immediate next change so
   every JS-only fix after it ships over the air.
+
+## v0.2.1 OTA #1 — seek buttons + display-aware brightness (app-only)
+First over-the-air update on the v0.2.1 binary: JS/TSX only, no native module
+or `app.json` change, no new dependencies.
+- [x] `lib/api.ts`: `seek(seconds)` (`POST /media/seek`, returns
+      `{ok, via: spotify|music|keys|noop}`), `displays()` (`GET /displays`),
+      and an optional `display` id param threaded through `brightnessUp()` /
+      `brightnessDown()` (query string, omitted entirely for classic
+      single-display behavior).
+- [x] `components/icons.tsx`: `IconSeekBack10` / `IconSeekForward10` — reuse
+      `IconRefresh`'s circular-arrow-plus-arrowhead shape (already-approved
+      stroke weight), mirrored via an SVG `<G>` transform for the back
+      direction, with a real `react-native-svg` `<Text>` "10" (not a
+      hand-drawn digit path) centered in the loop.
+- [x] `screens/RemoteScreen.tsx`: new seek row (back 10s / forward 10s, 52px
+      circles) between the transport cluster and the secondary row — sized
+      so its 122px footprint clears the volume rail at 360px width with
+      room to spare. First `via === "keys"` seek per session shows a
+      "Seeked in focused app" toast once (exact spotify/music seeks stay
+      silent, per spec).
+- [x] `lib/displayTarget.ts`: new per-device `{deviceId: displayId}` map in
+      AsyncStorage (one key) so a chosen brightness target on one saved Mac
+      never leaks onto another.
+- [x] `screens/remote/DisplayChooser.tsx`: bottom sheet (SleepSheet's shell:
+      backdrop, slide-up, handle) listing displays by name + brightness
+      percent ("LG ULTRAGEAR, 45"; no number when brightness is null);
+      selecting one persists the choice and retargets the brightness
+      buttons.
+- [x] `screens/RemoteScreen.tsx`: `/displays` fetched once per screen mount /
+      device switch (not in the 3s status poll), cached in state for the
+      session. A single display (or a failed probe) keeps today's behavior
+      byte-for-byte — no badge, no label, no error surfaced. With >1
+      display, a small chevron badge overlaid on the brightness-up button
+      (absolutely positioned, adds no width) opens the chooser; a tiny label
+      under the brightness pair names the active target only when it is a
+      non-builtin display.
+- [x] Acceptance: `npm run typecheck` green; `npx expo export --platform
+      android` bundles clean. No `app.json`/`package.json` diff.
