@@ -15,11 +15,17 @@ class Settings(BaseSettings):
     # Hammerspoon IPC CLI
     HS_BIN: str = "/opt/homebrew/bin/hs"
 
+    # m1ddc CLI - DDC/CI control for external displays (brightness only, so far)
+    M1DDC_BIN: str = "/opt/homebrew/bin/m1ddc"
+
     # HTTP
     PORT: int = 8484
 
     # Volume step for up/down endpoints (percentage points)
     VOLUME_STEP: int = 6
+
+    # Brightness step for external-display up/down endpoints (percentage points)
+    BRIGHTNESS_STEP: int = 8
 
     # Logging
     LOG_LEVEL: str = "DEBUG"

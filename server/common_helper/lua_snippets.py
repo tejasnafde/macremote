@@ -67,6 +67,19 @@ def brightness_down(step: int) -> str:
     return f"hs.brightness.set(math.max(0, hs.brightness.get() - {step}))"
 
 
+def brightness_set(level: int) -> str:
+    return f"hs.brightness.set(math.max(0, math.min(100, {level})))"
+
+
+# Safe brightness read for GET /displays: some Macs (desktops with no panel)
+# have no built-in brightness API and hs.brightness.get() returns nil, which
+# should surface as brightness: null rather than a bad request.
+BRIGHTNESS_GET = (
+    "local b = hs.brightness.get(); "
+    "if b then return tostring(math.floor(b + 0.5)) else return 'null' end"
+)
+
+
 # ── System ─────────────────────────────────────────────────────────────────────
 
 LOCK = "hs.caffeinate.lockScreen()"

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -49,6 +51,62 @@ exit "$(cat "{exit_file}")"
 
     monkeypatch.setattr(settings, "HS_BIN", str(script))
     return FakeHS()
+
+
+@pytest.fixture
+def fake_m1ddc(tmp_path, monkeypatch):
+    """A fake `m1ddc` CLI: records every invocation's args to a log file and
+    returns canned output/exit code keyed by the joined argv (falling back to
+    a shared default), so one test can script `display list` and
+    `get luminance` calls differently. Point `settings.M1DDC_BIN` at it so
+    tests never touch real m1ddc/DDC hardware.
+    """
+    script = tmp_path / "fake_m1ddc.py"
+    calls_file = tmp_path / "ddc_calls.log"
+    responses_file = tmp_path / "ddc_responses.json"
+
+    responses_file.write_text(json.dumps({"__default__": {"output": "", "exit_code": 0}}))
+
+    script.write_text(
+        f"""#!/usr/bin/env python3
+import json
+import sys
+
+args = sys.argv[1:]
+key = " ".join(args)
+
+with open({str(calls_file)!r}, "a") as f:
+    f.write(key + "\\n")
+
+with open({str(responses_file)!r}) as f:
+    responses = json.load(f)
+
+resp = responses.get(key, responses["__default__"])
+sys.stdout.write(resp["output"])
+sys.exit(resp["exit_code"])
+"""
+    )
+    script.chmod(0o755)
+
+    class FakeM1DDC:
+        path = str(script)
+
+        @property
+        def calls(self) -> list[str]:
+            if not calls_file.exists():
+                return []
+            return calls_file.read_text().splitlines()
+
+        def set_response(self, key: str, output: str, exit_code: int = 0) -> None:
+            responses = json.loads(responses_file.read_text())
+            responses[key] = {"output": output, "exit_code": exit_code}
+            responses_file.write_text(json.dumps(responses))
+
+        def set_default(self, output: str, exit_code: int = 0) -> None:
+            self.set_response("__default__", output, exit_code)
+
+    monkeypatch.setattr(settings, "M1DDC_BIN", str(script))
+    return FakeM1DDC()
 
 
 @pytest.fixture
