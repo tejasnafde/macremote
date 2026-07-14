@@ -51,6 +51,8 @@ jobs:
         run: cd app && npm ci
       - name: Expo prebuild (android)
         run: cd app && npx expo prebuild --platform android --no-install
+      - name: Raise Gradle JVM memory (expo-updates KSP OOMs the default 512m metaspace)
+        run: printf '\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\n' >> app/android/gradle.properties
       - name: Gradle assembleRelease
         run: cd app/android && ./gradlew assembleRelease --no-daemon -x lint
       - name: Sign APK
