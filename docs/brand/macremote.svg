@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- macremote: command-key loops fused with a play triangle. Flat, single
+       weight, no gradients. Ink: #E9EDF2 on #12151A, accent #4ADE80. -->
+  <rect width="512" height="512" rx="115" fill="#12151A"/>
+  <g stroke="#E9EDF2" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- center square of the command mark -->
+    <rect x="196" y="196" width="120" height="120" rx="10"/>
+    <!-- four command loops -->
+    <path d="M196 196 L196 152 A44 44 0 1 0 152 196 L196 196"/>
+    <path d="M316 196 L360 196 A44 44 0 1 0 316 152 L316 196"/>
+    <path d="M196 316 L152 316 A44 44 0 1 0 196 360 L196 316"/>
+    <path d="M316 316 L316 360 A44 44 0 1 0 360 316 L316 316"/>
+  </g>
+  <!-- play triangle in the center: the "remote" in macremote -->
+  <path d="M238 226 L238 286 L292 256 Z" fill="#4ADE80" stroke="#4ADE80" stroke-width="8" stroke-linejoin="round"/>
+</svg>

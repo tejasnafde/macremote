@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main, app]
+  pull_request:
+
+jobs:
+  server-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Run server tests
+        run: |
+          if [ -f server/pyproject.toml ]; then
+            cd server && uv sync && uv run pytest -q
+          else
+            echo "server not scaffolded yet — skipping"
+          fi
+
+  app-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Typecheck app
+        run: |
+          if [ -f app/package.json ]; then
+            cd app && npm ci && npm run typecheck
+          else
+            echo "app not scaffolded yet — skipping"
+          fi
+
+  notify-failure:
+    if: failure()
+    needs: [server-tests, app-typecheck]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Discord alert
+        run: |
+          curl -sf -H 'Content-Type: application/json' -d "$(jq -n \
+            --arg desc "❌ CI failed on \`${{ github.ref_name }}\` (${{ github.event_name }})" \
+            --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            '{username:"macremote", embeds:[{title:"CI failure", description:$desc, url:$url, color:15158332}]}')" \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}" || true

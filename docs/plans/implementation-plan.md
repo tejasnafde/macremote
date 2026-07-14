@@ -9,8 +9,8 @@ Rules for any agent working this plan:
 
 ## P0 — Bootstrap
 - [x] Repo skeleton, CLAUDE.md, design doc, this plan, .gitignore, LICENSE, README
-- [ ] GitHub repo `tejasnafde/macremote` (public) created, pushed
-- [ ] Actions secret `DISCORD_WEBHOOK_URL` set; signing keystore generated
+- [x] GitHub repo `tejasnafde/macremote` (public) created, pushed
+- [x] Actions secret `DISCORD_WEBHOOK_URL` set; signing keystore generated
       (`keytool`), backed up to `~/.macremote/release.keystore`, uploaded as
       `ANDROID_KEYSTORE_B64` + password/alias secrets
 
@@ -39,7 +39,7 @@ Rules for any agent working this plan:
 ## P2 — Mac integration (this Mac; e2e green = done)
 - [ ] `hammerspoon/macremote.lua` + loader line in `~/.hammerspoon/init.lua`;
       enable `hs.ipc` CLI install
-- [ ] `server/.env` created locally (API token generated, Discord webhook from user)
+- [x] `server/.env` created locally (API token generated, Discord webhook from user)
 - [ ] `ops/io.macremote.server.plist` + `ops/install.sh` (idempotent): uv sync,
       install plists into `~/Library/LaunchAgents`, bootstrap service, open
       Hammerspoon once

@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Server tests (release gate)
+        run: cd server && uv sync && uv run pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: App typecheck (release gate)
+        run: cd app && npm ci && npm run typecheck
+
+  build-apk:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Install app deps
+        run: cd app && npm ci
+      - name: Expo prebuild (android)
+        run: cd app && npx expo prebuild --platform android --no-install
+      - name: Gradle assembleRelease
+        run: cd app/android && ./gradlew assembleRelease --no-daemon -x lint
+      - name: Sign APK
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$KS_B64" | base64 -d > /tmp/release.keystore
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          APK_DIR=app/android/app/build/outputs/apk/release
+          SRC="$(ls "$APK_DIR"/*.apk | head -1)"
+          "$BT/zipalign" -f -p 4 "$SRC" /tmp/aligned.apk
+          "$BT/apksigner" sign --ks /tmp/release.keystore --ks-pass env:KS_PASS \
+            --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASS \
+            --out "macremote-${GITHUB_REF_NAME}.apk" /tmp/aligned.apk
+          "$BT/apksigner" verify "macremote-${GITHUB_REF_NAME}.apk"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PREV="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          if [ -n "$PREV" ]; then RANGE="$PREV..${GITHUB_REF_NAME}"; else RANGE="${GITHUB_REF_NAME}"; fi
+          git log --format='- %s' "$RANGE" | grep -v 'Co-Authored-By' > /tmp/notes.md || echo "- initial release" > /tmp/notes.md
+          gh release create "${GITHUB_REF_NAME}" "macremote-${GITHUB_REF_NAME}.apk" \
+            --title "macremote ${GITHUB_REF_NAME}" --notes-file /tmp/notes.md
+      - name: Discord release notification
+        run: |
+          SIZE="$(du -h "macremote-${GITHUB_REF_NAME}.apk" | cut -f1 | tr -d ' ')"
+          DL="${{ github.server_url }}/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/macremote-${GITHUB_REF_NAME}.apk"
+          REL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}"
+          curl -sf -H 'Content-Type: application/json' -d "$(jq -n \
+            --arg title "📦 macremote ${GITHUB_REF_NAME} — APK ready" \
+            --arg desc "Signed Android APK (${SIZE}) built, tested and published.\n\n**[⬇️ Download APK]($DL)** · [Release notes]($REL)" \
+            '{username:"macremote", embeds:[{title:$title, description:$desc, color:3447003}]}')" \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}"
+
+  notify-failure:
+    if: failure()
+    needs: [test, build-apk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Discord alert
+        run: |
+          curl -sf -H 'Content-Type: application/json' -d "$(jq -n \
+            --arg desc "❌ Release ${{ github.ref_name }} FAILED" \
+            --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            '{username:"macremote", embeds:[{title:"Release failure", description:$desc, url:$url, color:15158332}]}')" \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}" || true
