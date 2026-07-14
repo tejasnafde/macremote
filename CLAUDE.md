@@ -75,3 +75,8 @@ all operational alerts.
   Transport and control icons are vector SVGs, never emoji glyphs.
 - No em dashes in user-facing copy. Use commas, periods, or colons.
 - Keep Discord alert embeds restrained on emoji as well.
+
+## Comms (user rule)
+- All status updates go to the Discord webhook (read from server/.env), not
+  just chat: build outcomes, hangs, fixes, releases, OTA publishes.
+- No local APK builds: CI only (user vetoed the Android SDK download).
