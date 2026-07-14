@@ -7,6 +7,17 @@ require("hs.ipc")
 -- ensure the `hs` CLI exists for the server (idempotent)
 pcall(function() hs.ipc.cliInstall("/opt/homebrew") end)
 
+-- Preload every extension the server's Lua snippets touch. Lazy loading inside
+-- an IPC call interleaves "-- Loading extension:" chatter into the CLI stream
+-- (breaking JSON parsing) and has been observed to crash HS 1.1.1's libipc on
+-- macOS 26. Loading here keeps IPC calls quiet and cheap.
+for _, ext in ipairs({
+  "eventtap", "audiodevice", "brightness", "battery", "caffeinate",
+  "json", "spotify", "itunes", "application", "window", "host",
+}) do
+  pcall(function() return hs[ext] end)
+end
+
 macremote = {}
 
 -- Best-effort now-playing info (Spotify / Apple Music); nil when nothing plays.
