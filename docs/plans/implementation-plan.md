@@ -62,18 +62,23 @@ Rules for any agent working this plan:
       produces a GitHub Release with signed APK and a Discord notification.
 
 ## P4 — Android app + widget
-- [ ] Expo scaffold in `app/` (TypeScript, dark theme), deps: expo-file-system,
+- [x] Expo scaffold in `app/` (TypeScript, dark theme), deps: expo-file-system,
       expo-intent-launcher, react-native-android-widget
-- [ ] `lib/api.ts` — typed client, bearer token, timeouts, error toasts
-- [ ] Remote screen: media row, volume rocker + mute, brightness, lock, sleep,
+- [x] `lib/api.ts` — typed client, bearer token, timeouts, error toasts
+- [x] Remote screen: media row, volume rocker + mute, brightness, lock, sleep,
       sleep-timer picker with live countdown, now-playing card (poll /status 3s)
-- [ ] Settings screen: server URL + token (AsyncStorage), connection test,
+- [x] Settings screen: server URL + token (AsyncStorage), connection test,
       current version, check-for-update button
-- [ ] Self-update: `lib/updater.ts` (isNewer semver) + `lib/apk.ts`
+- [x] Self-update: `lib/updater.ts` (isNewer semver) + `lib/apk.ts`
       (download GitHub release asset → install intent), adapted from scout
-- [ ] Widget: ⏮ ▶️ ⏭ 🔉 🔊 via react-native-android-widget, headless HTTP
+- [x] Widget: ⏮ ▶️ ⏭ 🔉 🔊 via react-native-android-widget, headless HTTP
 - [ ] App icon: new flat ⌘+play mark (SVG in docs/brand/), adaptive icon set
+      — placeholder flat dark icon + adaptive set generated directly as PNGs
+      in `app/assets/`; no SVG in docs/brand/ yet, final brand icon pending.
 - [ ] Acceptance: `npm run typecheck` green; APK builds in release workflow.
+      typecheck is green (verified locally); APK build in CI's release
+      workflow is untested since P3's `.github/workflows/release.yml` and
+      Android SDK/Gradle build aren't available in this environment.
 
 ## P5 — Server auto-update
 - [ ] `ops/update.sh`: fetch tags → newer than `server/VERSION`? → `git pull`

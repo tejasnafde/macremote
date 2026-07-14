@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "macremote",
+    "slug": "macremote",
+    "version": "0.0.1",
+    "scheme": "macremote",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0f14",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "io.github.tejasnafde.macremote",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0f14",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES",
+        "android.permission.INTERNET"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "RemoteWidget",
+              "label": "macremote controls",
+              "description": "Media and volume controls for your Mac",
+              "minWidth": "260dp",
+              "minHeight": "72dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "resizeMode": "none"
+            }
+          ]
+        }
+      ]
+    ]
+  }
+}
