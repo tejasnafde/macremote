@@ -69,3 +69,9 @@ all operational alerts.
    lives in `server/.env` and `~/.macremote/` on this Mac, and in GitHub Actions
    secrets (`DISCORD_WEBHOOK_URL`, `ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`,
    `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) for CI.
+
+## Copy style (user rule, 2026-07-15)
+- No emojis anywhere in product UI (app, widget, release notes shown in-app).
+  Transport and control icons are vector SVGs, never emoji glyphs.
+- No em dashes in user-facing copy. Use commas, periods, or colons.
+- Keep Discord alert embeds restrained on emoji as well.
