@@ -22,6 +22,8 @@ async def get_status() -> dict:
     data["now_playing"] = data.pop("nowplaying", None)
     remaining = sleep_timer_service.remaining_seconds()
     data["sleep_timer"] = (
-        {"remaining_seconds": remaining} if remaining is not None else None
+        {"remaining_seconds": remaining, "mode": sleep_timer_service.mode()}
+        if remaining is not None
+        else None
     )
     return data

@@ -107,6 +107,14 @@ BRIGHTNESS_GET = (
 LOCK = "hs.caffeinate.lockScreen()"
 SLEEP = "hs.caffeinate.systemSleep()"
 
+# Blackout: volume to 0 and built-in brightness to 0 (external displays are
+# handled by the caller via m1ddc). The Mac stays awake.
+BLACKOUT = (
+    "local d = hs.audiodevice.defaultOutputDevice(); "
+    "if d then d:setOutputVolume(0) end; "
+    "if hs.brightness.get() then hs.brightness.set(0) end"
+)
+
 # Park the pointer in the bottom-right corner of the main screen. The movement
 # re-arms video players' cursor auto-hide (fixes the stuck cursor after
 # app-switching back into a fullscreen video) and leaves the pointer out of

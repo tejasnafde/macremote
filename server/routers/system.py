@@ -22,6 +22,13 @@ async def sleep() -> dict:
     return {"ok": True}
 
 
+@router.post("/blackout")
+async def blackout() -> dict:
+    """Volume 0 and brightness 0 on every display; the Mac stays awake."""
+    await system_handler.blackout()
+    return {"ok": True}
+
+
 @router.post("/banish-cursor")
 async def banish_cursor() -> dict:
     """Park the pointer in the corner: fixes the stuck cursor over fullscreen video."""

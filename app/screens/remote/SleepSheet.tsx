@@ -25,24 +25,30 @@ function fmtTime(totalSeconds: number): string {
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
+type SleepMode = 'sleep' | 'blackout';
+
 interface SleepSheetProps {
   visible: boolean;
   onClose: () => void;
   remainingSeconds: number | null;
-  onArm: (minutes: number) => void;
+  timerMode?: SleepMode | null;
+  onArm: (minutes: number, mode: SleepMode) => void;
   onCancelTimer: () => void;
   onSleepNow: () => void;
+  onBlackoutNow: () => void;
 }
 
-type TransientMode = 'confirm' | 'done' | null;
+type TransientMode = 'confirm' | 'done' | 'edit' | null;
 
 export function SleepSheet({
   visible,
   onClose,
   remainingSeconds,
+  timerMode,
   onArm,
   onCancelTimer,
   onSleepNow,
+  onBlackoutNow,
 }: SleepSheetProps) {
   const insets = useSafeAreaInsets();
   const [transientMode, setTransientMode] = useState<TransientMode>(null);
@@ -72,8 +78,11 @@ export function SleepSheet({
     return () => clearInterval(id);
   }, [remainingSeconds]);
 
-  const mode: 'select' | 'confirm' | 'done' | 'running' =
+  const [armMode, setArmMode] = useState<SleepMode>('sleep');
+
+  const mode: 'select' | 'confirm' | 'done' | 'running' | 'edit' =
     transientMode ?? (remainingSeconds != null ? 'running' : 'select');
+  const selecting = mode === 'select' || mode === 'edit';
 
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
@@ -92,10 +101,32 @@ export function SleepSheet({
           <View style={styles.handle} />
         </Pressable>
 
-        {mode === 'select' && (
+        {selecting && (
           <View>
-            <Text style={styles.title}>Sleep Timer</Text>
-            <Text style={styles.subtitle}>Fades your volume smoothly over the final minute.</Text>
+            <Text style={styles.title}>{mode === 'edit' ? 'Change Timer' : 'Sleep Timer'}</Text>
+            <Text style={styles.subtitle}>
+              {armMode === 'sleep'
+                ? 'Fades your volume over the final minute, then sleeps the Mac.'
+                : 'Fades your volume, then turns volume and every screen to zero. The Mac stays awake.'}
+            </Text>
+            <View style={styles.modeRow}>
+              <PressableScale
+                style={[styles.modeBtn, armMode === 'sleep' && styles.modeBtnSelected]}
+                onPress={() => setArmMode('sleep')}
+              >
+                <Text style={[styles.modeBtnText, armMode === 'sleep' && styles.modeBtnTextSelected]}>
+                  Sleep Mac
+                </Text>
+              </PressableScale>
+              <PressableScale
+                style={[styles.modeBtn, armMode === 'blackout' && styles.modeBtnSelected]}
+                onPress={() => setArmMode('blackout')}
+              >
+                <Text style={[styles.modeBtnText, armMode === 'blackout' && styles.modeBtnTextSelected]}>
+                  Screens Off
+                </Text>
+              </PressableScale>
+            </View>
             <View style={styles.chipRow}>
               {CHIP_CHOICES.map((m) => (
                 <PressableScale
@@ -153,13 +184,38 @@ export function SleepSheet({
               </View>
             )}
 
-            <PressableScale style={styles.primaryBtn} onPress={() => onArm(selectedMins)}>
-              <Text style={styles.primaryBtnLabel}>Start Timer · {selectedMins} min</Text>
+            <PressableScale
+              style={styles.primaryBtn}
+              onPress={() => {
+                onArm(selectedMins, armMode);
+                if (mode === 'edit') setTransientMode(null);
+              }}
+            >
+              <Text style={styles.primaryBtnLabel}>
+                {mode === 'edit' ? 'Update' : 'Start'} Timer · {selectedMins} min
+              </Text>
             </PressableScale>
-            <PressableScale style={styles.sleepNowLink} onPress={() => setTransientMode('confirm')}>
-              <IconMoon size={15} color={colors.off55} />
-              <Text style={styles.sleepNowLinkText}>Put Mac to sleep now</Text>
-            </PressableScale>
+            {mode === 'edit' ? (
+              <PressableScale style={styles.sleepNowLink} onPress={() => setTransientMode(null)}>
+                <Text style={styles.sleepNowLinkText}>Back to countdown</Text>
+              </PressableScale>
+            ) : (
+              <View style={styles.nowRow}>
+                <PressableScale style={styles.sleepNowLink} onPress={() => setTransientMode('confirm')}>
+                  <IconMoon size={15} color={colors.off55} />
+                  <Text style={styles.sleepNowLinkText}>Sleep now</Text>
+                </PressableScale>
+                <PressableScale
+                  style={styles.sleepNowLink}
+                  onPress={() => {
+                    onBlackoutNow();
+                    onClose();
+                  }}
+                >
+                  <Text style={styles.sleepNowLinkText}>Screens off now</Text>
+                </PressableScale>
+              </View>
+            )}
           </View>
         )}
 
@@ -203,14 +259,27 @@ export function SleepSheet({
 
         {mode === 'running' && (
           <View style={styles.countdownWrap}>
-            <Text style={styles.countdownLabel}>Falling asleep in</Text>
+            <Text style={styles.countdownLabel}>
+              {timerMode === 'blackout' ? 'Screens off in' : 'Falling asleep in'}
+            </Text>
             <Text style={styles.countdownNum}>{fmtTime(localRemaining ?? 0)}</Text>
             <Text style={[styles.countdownCaption, fading && styles.countdownCaptionFading]}>
               {fading ? 'Fading your volume now.' : 'Volume will fade over the final minute.'}
             </Text>
-            <PressableScale style={styles.secondaryBtnFull} onPress={onCancelTimer}>
-              <Text style={styles.secondaryBtnLabel}>Cancel Timer</Text>
-            </PressableScale>
+            <View style={styles.confirmRow}>
+              <PressableScale
+                style={styles.secondaryBtn}
+                onPress={() => {
+                  setArmMode(timerMode ?? 'sleep');
+                  setTransientMode('edit');
+                }}
+              >
+                <Text style={styles.secondaryBtnLabel}>Change</Text>
+              </PressableScale>
+              <PressableScale style={styles.secondaryBtn} onPress={onCancelTimer}>
+                <Text style={styles.secondaryBtnLabel}>Cancel Timer</Text>
+              </PressableScale>
+            </View>
           </View>
         )}
       </Animated.View>
@@ -237,6 +306,21 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.display, fontSize: 19, color: colors.off, marginBottom: 4, marginTop: 8 },
   subtitle: { fontFamily: fonts.body, fontSize: 12.5, color: colors.off55, marginBottom: 20, lineHeight: 18 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginBottom: 18 },
+  modeRow: { flexDirection: 'row', gap: 9, marginBottom: 16 },
+  modeBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: radii.sm,
+    backgroundColor: colors.ink800,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeBtnSelected: { borderColor: colors.green, backgroundColor: colors.green14 },
+  modeBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.off72 },
+  modeBtnTextSelected: { color: colors.green },
+  nowRow: { flexDirection: 'row', justifyContent: 'center', gap: 22 },
   chip: {
     height: 44,
     paddingHorizontal: 18,

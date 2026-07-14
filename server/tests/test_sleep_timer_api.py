@@ -5,7 +5,7 @@ from tests.conftest import AUTH_HEADERS
 def test_set_sleep_timer(client, fake_hs):
     resp = client.post("/sleep-timer", headers=AUTH_HEADERS, json={"minutes": 5})
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True, "minutes": 5}
+    assert resp.json() == {"ok": True, "minutes": 5, "mode": "sleep"}
     assert sleep_timer_service.is_active()
 
     status_resp = client.get("/status", headers=AUTH_HEADERS)

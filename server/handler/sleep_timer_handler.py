@@ -26,12 +26,17 @@ FADE_STEP_PERCENT = max(1, 100 // FADE_STEPS)
 class SleepTimerService:
     """One timer at a time; starting a new one cancels any in-flight timer."""
 
-    def __init__(self, sleep_fn=asyncio.sleep, run_hs_fn=run_hs, alert_fn=send_lifecycle):
+    def __init__(self, sleep_fn=asyncio.sleep, run_hs_fn=run_hs, alert_fn=send_lifecycle, blackout_fn=None):
         self._sleep = sleep_fn
         self._run_hs = run_hs_fn
         self._alert = alert_fn
+        self._blackout = blackout_fn
         self._task: asyncio.Task | None = None
         self._deadline: float | None = None  # time.monotonic() timestamp when it fires
+        self._mode: str = "sleep"
+
+    def mode(self) -> str | None:
+        return self._mode if self.is_active() else None
 
     def is_active(self) -> bool:
         return self._task is not None and not self._task.done()
@@ -41,8 +46,9 @@ class SleepTimerService:
             return None
         return max(0, round(self._deadline - time.monotonic()))
 
-    def start(self, minutes: int) -> None:
+    def start(self, minutes: int, mode: str = "sleep") -> None:
         self.cancel()
+        self._mode = mode
         total_seconds = minutes * 60
         self._deadline = time.monotonic() + total_seconds
         self._task = asyncio.create_task(self._run(total_seconds))
@@ -97,6 +103,22 @@ class SleepTimerService:
                     await asyncio.to_thread(self._run_hs, lua.MEDIA_PLAYPAUSE)
             except HSError as exc:
                 errorlogger.error(f"sleep_timer | media pause failed | {exc}")
+
+            if self._mode == "blackout":
+                # Volume 0 + all screens dark; the Mac stays awake, so no
+                # volume restore (volume 0 is the point).
+                try:
+                    blackout = self._blackout
+                    if blackout is None:
+                        from handler.system_handler import blackout as system_blackout
+
+                        blackout = system_blackout
+                    await blackout()
+                except Exception as exc:
+                    errorlogger.error(f"sleep_timer | blackout failed | {exc}")
+                infologger.info("sleep_timer | fired (blackout)")
+                self._alert("sleep timer fired: volume and screens to zero")
+                return
 
             # Restore volume so the Mac wakes at normal loudness (player is paused).
             if orig_volume is not None:

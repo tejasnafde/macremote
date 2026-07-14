@@ -27,8 +27,11 @@ export interface NowPlaying {
   state?: string | null;
 }
 
+export type SleepMode = 'sleep' | 'blackout';
+
 export interface SleepTimerStatus {
   remaining_seconds: number;
+  mode?: SleepMode | null;
 }
 
 export interface StatusResponse {
@@ -146,11 +149,13 @@ export const api = {
 
   lock: (): Promise<void> => request('/system/lock', { method: 'POST' }),
   sleep: (): Promise<void> => request('/system/sleep', { method: 'POST' }),
+  /** Volume 0 + brightness 0 on every display; the Mac stays awake. */
+  blackout: (): Promise<void> => request('/system/blackout', { method: 'POST' }),
   /** Parks the Mac's pointer in the screen corner (stuck-cursor-over-fullscreen-video fix). */
   banishCursor: (): Promise<void> => request('/system/banish-cursor', { method: 'POST' }),
 
-  setSleepTimer: (minutes: number): Promise<void> =>
-    request('/sleep-timer', { method: 'POST', body: JSON.stringify({ minutes }) }),
+  setSleepTimer: (minutes: number, mode: SleepMode = 'sleep'): Promise<void> =>
+    request('/sleep-timer', { method: 'POST', body: JSON.stringify({ minutes, mode }) }),
   cancelSleepTimer: (): Promise<void> => request('/sleep-timer', { method: 'DELETE' }),
 
   status: (): Promise<StatusResponse> => request<StatusResponse>('/status'),

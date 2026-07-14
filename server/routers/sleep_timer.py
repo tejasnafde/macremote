@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
@@ -13,12 +15,14 @@ router = APIRouter(
 
 class SleepTimerRequest(BaseModel):
     minutes: int = Field(ge=1, le=480)
+    mode: Literal["sleep", "blackout"] = "sleep"
 
 
 @router.post("")
 async def set_sleep_timer(body: SleepTimerRequest) -> dict:
-    sleep_timer_service.start(body.minutes)
-    return {"ok": True, "minutes": body.minutes}
+    """Arming while a timer runs replaces it, so re-arming IS editing."""
+    sleep_timer_service.start(body.minutes, body.mode)
+    return {"ok": True, "minutes": body.minutes, "mode": body.mode}
 
 
 @router.delete("")

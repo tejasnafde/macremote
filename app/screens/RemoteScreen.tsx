@@ -314,11 +314,11 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
 
   const sleepRemaining = optimisticSleepSeconds ?? status?.sleep_timer?.remaining_seconds ?? null;
 
-  async function handleArmTimer(minutes: number) {
+  async function handleArmTimer(minutes: number, mode: 'sleep' | 'blackout' = 'sleep') {
     timerGraceUntil.current = Date.now() + 8000;
     setOptimisticSleepSeconds(minutes * 60);
     try {
-      await api.setSleepTimer(minutes);
+      await api.setSleepTimer(minutes, mode);
       toast.show(`Sleep timer started, ${minutes} min`, 2000);
       await refreshStatus();
     } catch (err) {
@@ -341,6 +341,14 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   async function handleSleepNow() {
     try {
       await api.sleep();
+    } catch (err) {
+      toast.show(errMessage(err));
+    }
+  }
+  async function handleBlackoutNow() {
+    try {
+      await api.blackout();
+      toast.show('Volume and screens to zero', 1800);
     } catch (err) {
       toast.show(errMessage(err));
     }
@@ -405,6 +413,7 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
           {sleepRemaining != null && (
             <TimerPill
               remainingSeconds={sleepRemaining}
+              label={status?.sleep_timer?.mode === 'blackout' ? 'screens off' : 'sleep timer'}
               onPress={() => setSheetOpen(true)}
               onCancel={handleCancelTimer}
             />
@@ -514,11 +523,13 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
         visible={sheetOpen}
         onClose={() => setSheetOpen(false)}
         remainingSeconds={sleepRemaining}
-        onArm={(mins) => {
-          handleArmTimer(mins);
+        timerMode={status?.sleep_timer?.mode ?? null}
+        onArm={(mins, mode) => {
+          handleArmTimer(mins, mode);
         }}
         onCancelTimer={handleCancelTimer}
         onSleepNow={handleSleepNow}
+        onBlackoutNow={handleBlackoutNow}
       />
     </View>
   );
@@ -659,10 +670,12 @@ function NowPlayingHero({
 
 function TimerPill({
   remainingSeconds,
+  label = 'sleep timer',
   onPress,
   onCancel,
 }: {
   remainingSeconds: number;
+  label?: string;
   onPress: () => void;
   onCancel: () => void;
 }) {
@@ -683,7 +696,7 @@ function TimerPill({
       <IconSleep size={15} color={colors.green} />
       <Text style={styles.timerPillTime}>{fmtTime(local)}</Text>
       <Text style={[styles.timerPillLabel, fading && styles.timerPillLabelFading]}>
-        {fading ? 'fading now' : 'sleep timer'}
+        {fading ? 'fading now' : label}
       </Text>
       <PressableScale style={styles.timerPillClose} onPress={onCancel} accessibilityLabel="Cancel sleep timer">
         <IconX size={11} color={colors.off72} />
