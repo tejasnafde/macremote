@@ -394,3 +394,13 @@ or `app.json` change, no new dependencies.
   https ts.net name is the clean path. `serve --bg` persists across reboots.
 - TODO (after MediaSession lands, avoid app.json collision): can drop the
   Android usesCleartextTraffic hack once all clients use https.
+
+## Feedback 2026-07-15 (via site)
+- [x] banish-cursor 502 "ipc port is no longer valid (early)": transient right
+      after an HS reload. hs_bridge now retries once after 0.4s on that specific
+      error instead of 502 + alerting.
+- [ ] Loop / repeat control (repeat playlist / repeat one / off): media feature.
+      Spotify AppleScript exposes `repeating` (on/off only); Apple Music exposes
+      `song repeat` (off/one/all); browsers have no standard. Plan: server
+      POST /media/repeat {mode} best-effort per running app; app control in the
+      now-playing area. Build next unless reading gesture pad is reprioritized.
