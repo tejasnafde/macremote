@@ -346,3 +346,18 @@ or `app.json` change, no new dependencies.
   Covers browser scrolling and Readest page turns with one feature.
 - Widget play/pause: consider optimistic icon flip via stored flag if the
   combined glyph feels off.
+
+## v0.3.x: phone media notification (MediaSession) — user request, chosen "full"
+- Android native: Expo config plugin + Kotlin foreground Service holding a
+  MediaSessionCompat + MediaStyle notification (prev / playpause / next).
+  Shows in notification shade, Quick Settings media player, and lockscreen.
+- Foreground service keeps the RN JS context warm, so notification actions
+  emit a native event -> JS handler -> api call to the active device. No
+  native HTTP/storage needed.
+- JS: lib/mediaNotification.ts (start/update/stop + action listener wired to
+  api.playPause/next/previous). Settings toggle "Media controls in
+  notifications". RemoteScreen mirrors now_playing from /status into the
+  notification while enabled.
+- NATIVE CHANGE: APK release, bump runtimeVersion native-1 -> native-2.
+- iOS: deferred indefinitely (no build pipeline, needs paid Apple account,
+  breaks the free principle).
