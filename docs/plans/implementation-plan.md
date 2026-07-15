@@ -323,8 +323,21 @@ or `app.json` change, no new dependencies.
     /health then an authed empty /browser/report), `build.sh` (zips both
     manifest variants), `README.md` (load unpacked in Chrome, temporary
     add-on in Firefox).
-  - App-side follow-up not yet built: a tabs-list UI consuming
-    `/status.browser_tabs` and calling `POST /browser/tabs/{tab_id}/command`.
+  - [x] App tabs UI: `lib/api.ts` gained `BrowserTab`/`browser_tabs?` (optional,
+    absent on older servers) and `tabCommand(tabId, browser, action)`
+    (`POST /browser/tabs/{tab_id}/command`, fire-and-forget). `screens/
+    RemoteScreen.tsx` renders a compact rail-aware "Browser" card between
+    the now-playing hero and the thumb zone only when `browser_tabs` is a
+    non-empty array (nothing rendered otherwise): one row per tab (browser
+    initial badge, ellipsized title, playpause/focus/mute 28px icon
+    buttons), capped to ~3 visible rows via an inner `ScrollView` maxHeight
+    when there are more. Playpause optimistically flips its row's icon
+    (`optimisticTabPlaying` map), cleared on every 3s `/status` poll since
+    the extension executes within ~2s, well inside that cycle. New
+    `IconArrowUpRight` in `components/icons.tsx` for the focus action;
+    reused `IconPlay`/`IconPause`/`IconMute`. Pure TS/TSX, no new
+    dependencies, no `app.json` change. `npm run typecheck` and `npx expo
+    export --platform android` both green.
 - Reading mode: trackpad-like control for manga/light novels in browser AND
   Readest.app (confirmed installed). Lazy path: a generic input surface, not
   per-app integration. Server: POST /input/scroll {dx,dy} via

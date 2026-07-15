@@ -34,6 +34,16 @@ export interface SleepTimerStatus {
   mode?: SleepMode | null;
 }
 
+export interface BrowserTab {
+  tab_id: number;
+  browser: 'firefox' | 'chrome';
+  title: string;
+  playing: boolean;
+  audible: boolean;
+}
+
+export type BrowserTabAction = 'playpause' | 'focus' | 'mute';
+
 export interface StatusResponse {
   now_playing: NowPlaying | null;
   volume: number | null;
@@ -42,6 +52,8 @@ export interface StatusResponse {
   battery: number | null;
   /** null when no timer is armed */
   sleep_timer: SleepTimerStatus | null;
+  /** Absent on servers older than the browser bridge; treat as empty. */
+  browser_tabs?: BrowserTab[];
 }
 
 export interface HealthResponse {
@@ -159,6 +171,10 @@ export const api = {
   setSleepTimer: (minutes: number, mode: SleepMode = 'sleep'): Promise<void> =>
     request('/sleep-timer', { method: 'POST', body: JSON.stringify({ minutes, mode }) }),
   cancelSleepTimer: (): Promise<void> => request('/sleep-timer', { method: 'DELETE' }),
+
+  /** Fire-and-forget: the extension executes it within ~2s of its next poll. */
+  tabCommand: (tabId: number, browser: string, action: BrowserTabAction): Promise<void> =>
+    request(`/browser/tabs/${tabId}/command`, { method: 'POST', body: JSON.stringify({ action, browser }) }),
 
   status: (): Promise<StatusResponse> => request<StatusResponse>('/status'),
   health: (): Promise<HealthResponse> => request<HealthResponse>('/health'),

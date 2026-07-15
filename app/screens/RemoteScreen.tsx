@@ -4,7 +4,7 @@
 // Playing / Offline / Update) as live derived state from /status polling and
 // connectivity, not separate routes.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, Text, View } from 'react-native';
+import { AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PressableScale } from '../components/PressableScale';
 import { useToast } from '../components/Toast';
 import {
+  IconArrowUpRight,
   IconBattery,
   IconBrightnessDown,
   IconBrightnessUp,
@@ -24,6 +25,7 @@ import {
   IconCursor,
   IconDownload,
   IconLock,
+  IconMute,
   IconNext,
   IconPause,
   IconPlay,
@@ -35,7 +37,7 @@ import {
   IconWifiOff,
   IconX,
 } from '../components/icons';
-import { api, ApiError, Display, StatusResponse } from '../lib/api';
+import { api, ApiError, BrowserTab, BrowserTabAction, Display, StatusResponse } from '../lib/api';
 import { checkForUpdate, currentVersion, downloadAndInstall } from '../lib/apk';
 import { getActiveDevice } from '../lib/devices';
 import { getBrightnessTarget, setBrightnessTarget } from '../lib/displayTarget';
@@ -69,6 +71,7 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   const [online, setOnline] = useState(true);
   const [retrying, setRetrying] = useState(false);
   const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(null);
+  const [optimisticTabPlaying, setOptimisticTabPlaying] = useState<Record<number, boolean>>({});
   const [trackToast, setTrackToast] = useState<string | null>(null);
   const [lockOpen, setLockOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -100,6 +103,10 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
       // Browser playback reports no now-playing state, so only let the server
       // override the optimistic play/pause icon when it actually knows.
       if (s.now_playing?.state) setOptimisticPlaying(null);
+      // Tab commands land on the extension within ~2s, well inside the 3s
+      // poll cycle, so every poll already carries server truth: drop the
+      // optimistic overrides and let the fetched tab.playing render instead.
+      setOptimisticTabPlaying({});
       // Reconcile the timer pill with server truth on every poll; the short
       // grace window covers the beat between arming and the server reporting it.
       if (s.sleep_timer) {
@@ -214,6 +221,24 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
       await refreshStatus();
     } catch (err) {
       setOptimisticPlaying(null);
+      toast.show(errMessage(err));
+    }
+  }
+
+  async function handleTabCommand(tab: BrowserTab, action: BrowserTabAction) {
+    if (action === 'playpause') {
+      setOptimisticTabPlaying((prev) => ({ ...prev, [tab.tab_id]: !(prev[tab.tab_id] ?? tab.playing) }));
+    }
+    try {
+      await api.tabCommand(tab.tab_id, tab.browser, action);
+    } catch (err) {
+      if (action === 'playpause') {
+        setOptimisticTabPlaying((prev) => {
+          const next = { ...prev };
+          delete next[tab.tab_id];
+          return next;
+        });
+      }
       toast.show(errMessage(err));
     }
   }
@@ -415,6 +440,14 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
 
         {online && hasNowPlaying && (
           <NowPlayingHero title={nowPlaying!.title!} artist={nowPlaying!.artist} app={nowPlaying!.app} isPlaying={isPlaying} />
+        )}
+
+        {online && status?.browser_tabs && status.browser_tabs.length > 0 && (
+          <BrowserTabsSection
+            tabs={status.browser_tabs}
+            optimisticPlaying={optimisticTabPlaying}
+            onCommand={handleTabCommand}
+          />
         )}
 
         <View style={[styles.thumbZone, !online && styles.inert]}>
@@ -671,6 +704,80 @@ function NowPlayingHero({
   );
 }
 
+/* --------------------------- browser tabs section --------------------------- */
+
+const BROWSER_ROW_HEIGHT = 42;
+const BROWSER_MAX_ROWS = 3;
+
+function BrowserTabsSection({
+  tabs,
+  optimisticPlaying,
+  onCommand,
+}: {
+  tabs: BrowserTab[];
+  optimisticPlaying: Record<number, boolean>;
+  onCommand: (tab: BrowserTab, action: BrowserTabAction) => void;
+}) {
+  return (
+    <View style={styles.browserSection}>
+      <Text style={styles.browserHead}>Browser</Text>
+      <ScrollView
+        style={tabs.length > BROWSER_MAX_ROWS ? { maxHeight: BROWSER_ROW_HEIGHT * BROWSER_MAX_ROWS } : undefined}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
+      >
+        {tabs.map((tab, i) => (
+          <BrowserTabRow
+            key={`${tab.browser}-${tab.tab_id}`}
+            tab={tab}
+            playing={optimisticPlaying[tab.tab_id] ?? tab.playing}
+            last={i === tabs.length - 1}
+            onCommand={(action) => onCommand(tab, action)}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function BrowserTabRow({
+  tab,
+  playing,
+  last,
+  onCommand,
+}: {
+  tab: BrowserTab;
+  playing: boolean;
+  last: boolean;
+  onCommand: (action: BrowserTabAction) => void;
+}) {
+  return (
+    <View style={[styles.browserRow, !last && styles.browserRowDivider]}>
+      <View style={styles.browserBadge}>
+        <Text style={styles.browserBadgeText}>{tab.browser === 'firefox' ? 'F' : 'C'}</Text>
+      </View>
+      <Text style={styles.browserTitle} numberOfLines={1}>
+        {tab.title || 'Untitled tab'}
+      </Text>
+      <View style={styles.browserActions}>
+        <PressableScale
+          style={styles.browserBtn}
+          onPress={() => onCommand('playpause')}
+          accessibilityLabel={playing ? 'Pause tab' : 'Play tab'}
+        >
+          {playing ? <IconPause size={13} color={colors.off} /> : <IconPlay size={13} color={colors.off} />}
+        </PressableScale>
+        <PressableScale style={styles.browserBtn} onPress={() => onCommand('focus')} accessibilityLabel="Focus tab">
+          <IconArrowUpRight size={13} color={colors.off72} />
+        </PressableScale>
+        <PressableScale style={styles.browserBtn} onPress={() => onCommand('mute')} accessibilityLabel="Mute tab">
+          <IconMute size={13} color={colors.off72} />
+        </PressableScale>
+      </View>
+    </View>
+  );
+}
+
 /* ------------------------------ timer pill ------------------------------ */
 
 function TimerPill({
@@ -882,6 +989,56 @@ const styles = StyleSheet.create({
   npAppPillText: { fontFamily: fonts.bold, fontSize: 11, color: colors.off55 },
   eqBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2.5, height: 12 },
   eqBar: { width: 2.5, borderRadius: 2, backgroundColor: colors.green },
+
+  // Rail-aware like npHero/banner above it. Max ~3 rows visible (see
+  // BROWSER_ROW_HEIGHT/BROWSER_MAX_ROWS); the inner ScrollView only caps
+  // height when there are more tabs than that, so a 1-2 tab list never
+  // shows a clipped scroll affordance it doesn't need.
+  browserSection: {
+    marginTop: 10,
+    marginRight: railWidth - spacing.screenX,
+    backgroundColor: colors.ink850,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
+  browserHead: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.off38,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  browserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    height: BROWSER_ROW_HEIGHT,
+  },
+  browserRowDivider: { borderBottomWidth: 1, borderBottomColor: colors.line },
+  browserBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: colors.ink700,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  browserBadgeText: { fontFamily: fonts.extraBold, fontSize: 10.5, color: colors.off72 },
+  browserTitle: { flex: 1, minWidth: 0, fontFamily: fonts.medium, fontSize: 12.5, color: colors.off },
+  browserActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  browserBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.ink700,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   thumbZone: { marginTop: 'auto', alignItems: 'center', paddingRight: 56 },
 

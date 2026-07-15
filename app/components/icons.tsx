@@ -299,6 +299,15 @@ export function IconCursor({ size = 20, color = '#f3f5f1' }: IconProps) {
   );
 }
 
+export function IconArrowUpRight({ size = 20, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M7 17 17 7" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M8.5 7H17v8.5" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function IconMoon({ size = 24, color = '#f3f5f1' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
