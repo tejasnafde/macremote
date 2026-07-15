@@ -18,6 +18,22 @@ export function IconChevronDouble({ size = 11, color = '#f3f5f1' }: IconProps) {
   );
 }
 
+export function IconHelp({ size = 16, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={1.6} />
+      <Path
+        d="M9.2 9.3a2.8 2.8 0 1 1 3.8 2.6c-.7.3-1 .8-1 1.6v.4"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={12} cy={17} r={0.9} fill={color} />
+    </Svg>
+  );
+}
+
 export function IconBattery({ size = 20, color = '#f3f5f1' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

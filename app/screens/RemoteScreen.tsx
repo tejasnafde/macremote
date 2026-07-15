@@ -24,6 +24,7 @@ import {
   IconChevronDouble,
   IconCursor,
   IconDownload,
+  IconHelp,
   IconLock,
   IconMute,
   IconNext,
@@ -43,6 +44,7 @@ import { getActiveDevice } from '../lib/devices';
 import { getBrightnessTarget, setBrightnessTarget } from '../lib/displayTarget';
 import { colors, fonts, radii, railWidth, spacing } from '../theme';
 import { DisplayChooser } from './remote/DisplayChooser';
+import { DisplayHelpCard } from './remote/DisplayHelpCard';
 import { LockOverlay } from './remote/LockOverlay';
 import { SleepSheet } from './remote/SleepSheet';
 import { VolumeRail } from './remote/VolumeRail';
@@ -84,6 +86,8 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   const [displays, setDisplays] = useState<Display[] | null>(null);
   const [brightnessTargetId, setBrightnessTargetId] = useState<string | null>(null);
   const [displayChooserOpen, setDisplayChooserOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpAutoShownRef = useRef(false);
   const keysToastShownRef = useRef(false);
 
   const [updateInfo, setUpdateInfo] = useState<{ version: string; apkUrl: string } | null>(null);
@@ -289,7 +293,14 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
     action()
       .then((res) => {
         if (res?.display_unsupported) {
-          toast.show('This display ignores brightness control (DDC off or blocked)', 2600);
+          // First time per session: open the full help card. After that a
+          // short toast plus the "?" icon (which reopens the card on demand).
+          if (!helpAutoShownRef.current) {
+            helpAutoShownRef.current = true;
+            setHelpOpen(true);
+          } else {
+            toast.show('This display is not accepting brightness commands', 2400);
+          }
           return;
         }
         toast.show(direction === 'up' ? 'Brightness up' : 'Brightness down', 1100);
@@ -518,15 +529,26 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
                 </View>
               </View>
               {hasMultipleDisplays && (
-                <PressableScale
-                  onPress={() => setDisplayChooserOpen(true)}
-                  accessibilityLabel="Choose brightness target display"
-                  hitSlop={10}
-                >
-                  <Text style={styles.brightTargetLabel} numberOfLines={1}>
-                    {activeDisplay?.name ?? 'Built-in'}
-                  </Text>
-                </PressableScale>
+                <View style={styles.brightTargetRow}>
+                  <PressableScale
+                    onPress={() => setDisplayChooserOpen(true)}
+                    accessibilityLabel="Choose brightness target display"
+                    hitSlop={10}
+                  >
+                    <Text style={styles.brightTargetLabel} numberOfLines={1}>
+                      {activeDisplay?.name ?? 'Built-in'}
+                    </Text>
+                  </PressableScale>
+                  {activeDisplay && !activeDisplay.builtin && (
+                    <PressableScale
+                      onPress={() => setHelpOpen(true)}
+                      accessibilityLabel="Why is external brightness not working"
+                      hitSlop={10}
+                    >
+                      <IconHelp size={14} color={colors.off38} />
+                    </PressableScale>
+                  )}
+                </View>
               )}
             </View>
             <PressableScale style={styles.sBtn} onPress={handleLockPress} accessibilityLabel="Lock">
@@ -556,6 +578,8 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
       />
 
       <LockOverlay visible={lockOpen} onUnlock={() => setLockOpen(false)} />
+
+      <DisplayHelpCard visible={helpOpen} onClose={() => setHelpOpen(false)} />
 
       <DisplayChooser
         visible={displayChooserOpen}
@@ -1158,6 +1182,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  brightTargetRow: { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
   brightTargetLabel: {
     fontFamily: fonts.medium,
     fontSize: 9.5,
