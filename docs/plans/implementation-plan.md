@@ -348,16 +348,49 @@ or `app.json` change, no new dependencies.
   combined glyph feels off.
 
 ## v0.3.x: phone media notification (MediaSession) — user request, chosen "full"
-- Android native: Expo config plugin + Kotlin foreground Service holding a
+- [x] Android native: Expo config plugin + Kotlin foreground Service holding a
   MediaSessionCompat + MediaStyle notification (prev / playpause / next).
   Shows in notification shade, Quick Settings media player, and lockscreen.
-- Foreground service keeps the RN JS context warm, so notification actions
+- [x] Foreground service keeps the RN JS context warm, so notification actions
   emit a native event -> JS handler -> api call to the active device. No
   native HTTP/storage needed.
-- JS: lib/mediaNotification.ts (start/update/stop + action listener wired to
+- [x] JS: lib/mediaNotification.ts (start/update/stop + action listener wired to
   api.playPause/next/previous). Settings toggle "Media controls in
   notifications". RemoteScreen mirrors now_playing from /status into the
   notification while enabled.
-- NATIVE CHANGE: APK release, bump runtimeVersion native-1 -> native-2.
+- NATIVE CHANGE: APK release, bump runtimeVersion native-1 -> native-2
+  (handled by the release script, not committed here).
 - iOS: deferred indefinitely (no build pipeline, needs paid Apple account,
   breaks the free principle).
+- Landed (2026-07-15):
+  - `app/plugins/withMediaSession.js` — adds FOREGROUND_SERVICE,
+    FOREGROUND_SERVICE_MEDIA_PLAYBACK, POST_NOTIFICATIONS; registers the
+    `expo.modules.mediasession.MediaNotificationService`
+    (foregroundServiceType=mediaPlayback + MEDIA_BUTTON intent-filter) and
+    androidx.media's MediaButtonReceiver. Wired into app.json plugins.
+  - `app/modules/media-session/` — local Expo module (autolinked via the
+    default `./modules` nativeModulesDir). `MediaNotificationManager` (object)
+    owns the MediaSessionCompat + MediaStyle notification and dispatches
+    onPlay/onPause/onSkipToNext/onSkipToPrevious to JS; `MediaNotificationService`
+    is the foreground host + MediaButtonReceiver.handleIntent sink;
+    `MediaSessionModule` exposes startOrUpdate / stop + the "onMediaAction"
+    event. androidx.media:media:1.7.0 in the module build.gradle.
+  - JS: `lib/mediaNotification.ts` (requireOptionalNativeModule wrapper +
+    POST_NOTIFICATIONS request), `lib/settings.ts` (toggle, default OFF),
+    `lib/useMediaNotification.ts` (mirror /status -> notification, map actions
+    -> api). Toggle added to DevicesScreen ("Settings" section). RemoteScreen
+    wires the hook to its existing 3s poll.
+  - Verified locally: `npm run typecheck` green; `npx expo prebuild --platform
+    android --no-install` applies the plugin cleanly (manifest carries the
+    service + receiver + 3 permissions); `node --check` on the plugin.
+    Kotlin compiles in CI only (no Android SDK here).
+
+## Tailscale HTTPS (2026-07-15) — no more cleartext
+- HTTPS enabled on tailnet; `tailscale serve --bg --https=443 http://127.0.0.1:8484`
+  fronts the server with a valid Let's Encrypt cert.
+- Canonical client URL: https://tejass-macbook-air.tailfe6a0e.ts.net (port 443,
+  omit :8484). Works on any network on the tailnet, no browser complaints.
+- Plain http://<tailscale-ip>:8484 still works (server binds 0.0.0.0:8484); the
+  https ts.net name is the clean path. `serve --bg` persists across reboots.
+- TODO (after MediaSession lands, avoid app.json collision): can drop the
+  Android usesCleartextTraffic hack once all clients use https.

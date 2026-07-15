@@ -42,6 +42,8 @@ import { api, ApiError, BrowserTab, BrowserTabAction, Display, StatusResponse } 
 import { checkForUpdate, currentVersion, downloadAndInstall } from '../lib/apk';
 import { getActiveDevice } from '../lib/devices';
 import { getBrightnessTarget, setBrightnessTarget } from '../lib/displayTarget';
+import { getMediaNotificationEnabled } from '../lib/settings';
+import { useMediaNotification } from '../lib/useMediaNotification';
 import { colors, fonts, radii, railWidth, spacing } from '../theme';
 import { DisplayChooser } from './remote/DisplayChooser';
 import { DisplayHelpCard } from './remote/DisplayHelpCard';
@@ -69,6 +71,7 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
 
   const [deviceName, setDeviceName] = useState('Mac');
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [mediaNotifEnabled, setMediaNotifEnabled] = useState(false);
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [online, setOnline] = useState(true);
   const [retrying, setRetrying] = useState(false);
@@ -134,6 +137,8 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
         setBrightnessTargetId(null);
       }
     });
+    // Re-read the toggle on every device switch / return from Settings.
+    getMediaNotificationEnabled().then(setMediaNotifEnabled);
   }, [refreshToken]);
 
   // Lazy, session-cached /displays probe — deliberately not part of the 3s
@@ -217,6 +222,19 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   const npState = status?.now_playing?.state?.toLowerCase() ?? null;
   const serverIsPlaying = npState ? npState.includes('play') : false;
   const isPlaying = optimisticPlaying ?? serverIsPlaying;
+
+  // Mirror now-playing into the native media notification (shade + Quick
+  // Settings + lockscreen) while the Settings toggle is on and a device is
+  // active. Notification button presses route back here as api calls.
+  useMediaNotification({
+    enabled: mediaNotifEnabled,
+    hasDevice: deviceId != null,
+    online,
+    deviceName,
+    nowPlaying: status?.now_playing,
+    isPlaying,
+    refresh: refreshStatus,
+  });
 
   async function handlePlayPause() {
     setOptimisticPlaying(!isPlaying);

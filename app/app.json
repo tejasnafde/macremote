@@ -56,7 +56,8 @@
         }
       ],
       "expo-build-properties",
-      "expo-font"
+      "expo-font",
+      "./plugins/withMediaSession.js"
     ],
     "owner": "tejasnafde",
     "extra": {

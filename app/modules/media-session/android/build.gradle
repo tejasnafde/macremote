@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'io.github.tejasnafde.macremote.mediasession'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.mediasession"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // MediaSessionCompat + androidx.media.app.NotificationCompat.MediaStyle +
+  // MediaButtonReceiver. androidx.core (NotificationCompat, ServiceCompat) is
+  // provided transitively by expo-modules-core.
+  implementation "androidx.media:media:1.7.0"
+}

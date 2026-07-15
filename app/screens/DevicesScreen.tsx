@@ -3,8 +3,8 @@
 // timeout whenever this screen opens), glance info for the active device
 // pulled live from /status, tap-to-switch, a dashed "Windows support, soon"
 // teaser row, and "+ Add device" into the Setup flow.
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -24,6 +24,8 @@ import {
   renameDevice,
   setActiveDevice,
 } from '../lib/devices';
+import { ensureNotificationPermission, stop as stopMediaNotification } from '../lib/mediaNotification';
+import { getMediaNotificationEnabled, setMediaNotificationEnabled } from '../lib/settings';
 import { colors, fonts, radii, spacing } from '../theme';
 
 interface RowState {
@@ -45,6 +47,8 @@ export function DevicesScreen({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [rowState, setRowState] = useState<Record<string, RowState>>({});
   const [glance, setGlance] = useState<string>('');
+  const [mediaNotif, setMediaNotif] = useState(false);
+  const mediaNotifBusy = useRef(false);
 
   const refresh = useCallback(async () => {
     const state = await getDevicesState();
@@ -81,6 +85,36 @@ export function DevicesScreen({
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    getMediaNotificationEnabled().then(setMediaNotif);
+  }, []);
+
+  // Single-flight so a double tap (or tapping while the OS permission dialog is
+  // up) can't fire two toggles.
+  async function handleToggleMediaNotif(next: boolean) {
+    if (mediaNotifBusy.current) return;
+    mediaNotifBusy.current = true;
+    try {
+      if (next) {
+        const granted = await ensureNotificationPermission();
+        if (!granted) {
+          toast.show('Allow notifications to use media controls', 2400);
+          return;
+        }
+        await setMediaNotificationEnabled(true);
+        setMediaNotif(true);
+        toast.show('Media controls on', 1600);
+      } else {
+        await setMediaNotificationEnabled(false);
+        setMediaNotif(false);
+        stopMediaNotification();
+        toast.show('Media controls off', 1600);
+      }
+    } finally {
+      mediaNotifBusy.current = false;
+    }
+  }
 
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
 
@@ -191,6 +225,20 @@ export function DevicesScreen({
         <IconPlus size={16} color={colors.off72} />
         <Text style={styles.addLabel}>Add device</Text>
       </PressableScale>
+
+      <Text style={styles.sectionHead}>Settings</Text>
+      <View style={[styles.row, styles.settingRow]}>
+        <View style={styles.info}>
+          <Text style={styles.name}>Media controls in notifications</Text>
+          <Text style={styles.glance}>Control the active Mac from the shade and lockscreen</Text>
+        </View>
+        <Switch
+          value={mediaNotif}
+          onValueChange={handleToggleMediaNotif}
+          trackColor={{ false: colors.ink600, true: colors.green24 }}
+          thumbColor={mediaNotif ? colors.green : colors.off38}
+        />
+      </View>
     </ScrollView>
   );
 }
@@ -315,6 +363,16 @@ const styles = StyleSheet.create({
     minHeight: 58,
   },
   addLabel: { fontFamily: fonts.bold, fontSize: 14, color: colors.off72 },
+  sectionHead: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.off38,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginTop: 18,
+    marginBottom: 10,
+  },
+  settingRow: { alignItems: 'center' },
   renameBar: {
     flexDirection: 'row',
     alignItems: 'center',
