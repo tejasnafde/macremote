@@ -7,18 +7,14 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
-  const { round, action, selected, comments } = req.body ?? {};
+  const { action, kind, comments } = req.body ?? {};
   if (!action) return res.status(400).json({ error: "missing action" });
 
   const stamp = new Date().toISOString();
   const md = [
-    `### ${action === "proceed" ? "✳️ PROCEED" : "📝 Feedback"} — round ${round ?? "?"}`,
+    `### Feedback${kind ? ` — ${kind}` : ""}`,
     ``,
-    `- **selected**: \`${selected ?? "none"}\``,
-    `- **action**: \`${action}\``,
     `- **at**: ${stamp}`,
-    ``,
-    `**comments:**`,
     ``,
     comments ? comments : "_none_",
   ].join("\n");
@@ -49,9 +45,9 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           username: "macremote design",
           embeds: [{
-            title: action === "proceed" ? "✳️ Design greenlit" : "📝 Design feedback received",
-            description: `**Selected:** ${selected ?? "none"}\n${comments ? `**Comments:** ${comments.slice(0, 1500)}` : "_no comments_"}`,
-            color: action === "proceed" ? 4901712 : 3447003,
+            title: `Feedback received${kind ? ` (${kind})` : ""}`,
+            description: comments ? comments.slice(0, 1800) : "_no comments_",
+            color: 3447003,
           }],
         }),
       });
