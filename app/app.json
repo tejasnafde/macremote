@@ -71,8 +71,6 @@
       },
       "checkAutomatically": "ON_LOAD"
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    }
+    "runtimeVersion": "native-1"
   }
 }
