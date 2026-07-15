@@ -20,10 +20,19 @@ end
 
 macremote = {}
 
+-- Is an app already running? hs.application.get(bundleID) returns nil without
+-- launching it. hs.spotify.isRunning()/hs.itunes.isRunning() must NOT be used
+-- as the gate: they resolve the app via AppleScript, which LaunchServices then
+-- STARTS if it is not open (this was spam-launching Apple Music every poll).
+local function running(bundleID)
+  return hs.application.get(bundleID) ~= nil
+end
+
 -- Best-effort now-playing info (Spotify / Apple Music); nil when nothing plays.
+-- Only touches an app's scripting API if that app is already running.
 function macremote.nowPlaying()
   local ok, res = pcall(function()
-    if hs.spotify and hs.spotify.isRunning() then
+    if running("com.spotify.client") then
       return {
         app = "Spotify",
         title = hs.spotify.getCurrentTrack(),
@@ -31,7 +40,7 @@ function macremote.nowPlaying()
         state = hs.spotify.getPlaybackState(),
       }
     end
-    if hs.itunes and hs.itunes.isRunning and hs.itunes.isRunning() then
+    if running("com.apple.Music") then
       return {
         app = "Music",
         title = hs.itunes.getCurrentTrack(),
