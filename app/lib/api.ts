@@ -42,7 +42,7 @@ export interface BrowserTab {
   audible: boolean;
 }
 
-export type BrowserTabAction = 'playpause' | 'focus' | 'mute';
+export type BrowserTabAction = 'playpause' | 'focus' | 'mute' | 'seek';
 
 export interface StatusResponse {
   now_playing: NowPlaying | null;
@@ -179,9 +179,13 @@ export const api = {
     request('/sleep-timer', { method: 'POST', body: JSON.stringify({ minutes, mode }) }),
   cancelSleepTimer: (): Promise<void> => request('/sleep-timer', { method: 'DELETE' }),
 
-  /** Fire-and-forget: the extension executes it within ~2s of its next poll. */
-  tabCommand: (tabId: number, browser: string, action: BrowserTabAction): Promise<void> =>
-    request(`/browser/tabs/${tabId}/command`, { method: 'POST', body: JSON.stringify({ action, browser }) }),
+  /** Fire-and-forget: the extension executes it within ~2s of its next poll.
+   *  `value` carries the seek delta in seconds when action is "seek". */
+  tabCommand: (tabId: number, browser: string, action: BrowserTabAction, value?: number): Promise<void> =>
+    request(`/browser/tabs/${tabId}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ action, browser, ...(value !== undefined ? { value } : {}) }),
+    }),
 
   status: (): Promise<StatusResponse> => request<StatusResponse>('/status'),
   health: (): Promise<HealthResponse> => request<HealthResponse>('/health'),

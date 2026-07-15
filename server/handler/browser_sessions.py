@@ -59,8 +59,10 @@ class BrowserSessionRegistry:
             for session in self._sessions.values()
         ]
 
-    def enqueue_command(self, browser: str, tab_id: int, action: str) -> dict:
+    def enqueue_command(self, browser: str, tab_id: int, action: str, value: int | None = None) -> dict:
         command = {"id": self._next_command_id, "tab_id": tab_id, "action": action}
+        if value is not None:
+            command["value"] = value  # e.g. seek delta in seconds
         self._next_command_id += 1
         self._commands.setdefault(browser, []).append(command)
         return command

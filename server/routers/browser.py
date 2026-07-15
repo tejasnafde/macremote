@@ -19,7 +19,7 @@ router = APIRouter(
 )
 
 BrowserName = Literal["firefox", "chrome"]
-CommandAction = Literal["playpause", "focus", "mute"]
+CommandAction = Literal["playpause", "focus", "mute", "seek"]
 
 
 class TabIn(BaseModel):
@@ -39,6 +39,7 @@ class ReportBody(BaseModel):
 class CommandBody(BaseModel):
     action: CommandAction
     browser: BrowserName
+    value: int | None = None  # seek delta in seconds (for action="seek")
 
 
 @router.post("/report")
@@ -58,7 +59,7 @@ _BROWSER_BUNDLE = {"firefox": "org.mozilla.firefox", "chrome": "com.google.Chrom
 
 @router.post("/tabs/{tab_id}/command")
 async def enqueue_command(tab_id: int, body: CommandBody) -> dict:
-    command = browser_sessions.registry.enqueue_command(body.browser, tab_id, body.action)
+    command = browser_sessions.registry.enqueue_command(body.browser, tab_id, body.action, body.value)
     # On focus, also raise the browser app itself: the extension switches the
     # tab, but macOS will not let a backgrounded browser foreground itself, so
     # the Mac does it (handles whichever display the window is on). Best effort.

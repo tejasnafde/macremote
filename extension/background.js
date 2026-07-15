@@ -189,6 +189,34 @@ async function toggleMute(tabId) {
   }
 }
 
+async function seekTab(tabId, seconds) {
+  try {
+    await api.scripting.executeScript({
+      target: { tabId },
+      args: [seconds],
+      func: (delta) => {
+        const media = Array.from(document.querySelectorAll("video, audio"));
+        if (media.length === 0) return;
+        const playing = media.find((el) => !el.paused);
+        const target =
+          playing ||
+          media.reduce((largest, el) => {
+            const area = (el.videoWidth || el.clientWidth || 0) * (el.videoHeight || el.clientHeight || 0);
+            const largestArea = (largest.videoWidth || largest.clientWidth || 0) * (largest.videoHeight || largest.clientHeight || 0);
+            return area > largestArea ? el : largest;
+          });
+        if (Number.isFinite(target.duration)) {
+          target.currentTime = Math.max(0, Math.min(target.duration, target.currentTime + delta));
+        } else {
+          target.currentTime = Math.max(0, target.currentTime + delta);
+        }
+      },
+    });
+  } catch (err) {
+    console.error("macremote: seek injection failed", err);
+  }
+}
+
 async function executeCommand(command) {
   const tabId = command.tab_id;
   if (command.action === "playpause") {
@@ -197,6 +225,8 @@ async function executeCommand(command) {
     await focusTab(tabId);
   } else if (command.action === "mute") {
     await toggleMute(tabId);
+  } else if (command.action === "seek") {
+    await seekTab(tabId, Number(command.value) || 0);
   } else {
     console.warn("macremote: unknown command action", command.action);
   }

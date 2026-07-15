@@ -371,7 +371,19 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   }
 
   async function handleSeek(seconds: number) {
+    // If the active audio is a browser tab (no native Spotify/Music now-playing
+    // but a browser tab is playing), seek THAT tab precisely via the extension.
+    // Arrow-key fallback in the server path is unreliable for browser media
+    // (YouTube Music does not seek on arrows, and the browser is not focused).
+    const playingTab =
+      !status?.now_playing?.title
+        ? status?.browser_tabs?.find((t) => t.playing) ?? null
+        : null;
     try {
+      if (playingTab) {
+        await api.tabCommand(playingTab.tab_id, playingTab.browser, 'seek', seconds);
+        return;
+      }
       const res = await api.seek(seconds);
       if (res.via === 'keys' && !keysToastShownRef.current) {
         keysToastShownRef.current = true;
