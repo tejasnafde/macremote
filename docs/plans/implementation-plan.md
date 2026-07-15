@@ -298,8 +298,33 @@ or `app.json` change, no new dependencies.
       android` bundles clean. No `app.json`/`package.json` diff.
 
 ## v0.3 scope (user requests, 2026-07-15 late night)
-- Browser extension bridge (Firefox + Chromium): audible tabs list, per-tab
-  play/pause/focus, browser now-playing in /status.
+- [x] Browser extension bridge (Firefox + Chromium, one codebase): audible
+      tabs list, per-tab play/pause/focus/mute, browser tabs surfaced in
+      /status.
+  - Server: `handler/browser_sessions.py` (in-memory registry, 15s TTL,
+    lazy purge on read, wholesale replace per report), `routers/browser.py`
+    — `POST /browser/report`, `GET /browser/commands?browser=`, `POST
+    /browser/tabs/{tab_id}/command`; `/status` gained `browser_tabs`
+    (empty list when none). Tests: `tests/test_browser.py` (report/replace/
+    expiry, command enqueue+drain, per-browser isolation, /status shape,
+    auth) plus a `browser_registry` fixture (fake clock) in
+    `tests/conftest.py`. `uv run pytest`: 97 passed.
+  - `scripts/e2e_mac.sh`: checks `/status.browser_tabs` is present and an
+    array.
+  - `extension/`: MV3 WebExtension, plain JS, no build step —
+    `manifest.json` (Chrome, `background.service_worker`) +
+    `manifest.firefox.json` (Firefox, `background.scripts` + gecko id,
+    since Firefox MV3 doesn't support service workers), `background.js`
+    (chrome.alarms-driven report/poll loop: report every 5s, poll commands
+    every 2s while media tabs are known else 15s; toggles playback via
+    `scripting.executeScript` on the largest/playing `<video>`/`<audio>`;
+    focus/mute via `tabs.update`/`windows.update`), `options.html/js/css`
+    (dark, on-brand: server URL + token, save, connection test hitting
+    /health then an authed empty /browser/report), `build.sh` (zips both
+    manifest variants), `README.md` (load unpacked in Chrome, temporary
+    add-on in Firefox).
+  - App-side follow-up not yet built: a tabs-list UI consuming
+    `/status.browser_tabs` and calling `POST /browser/tabs/{tab_id}/command`.
 - Reading mode: trackpad-like control for manga/light novels in browser AND
   Readest.app (confirmed installed). Lazy path: a generic input surface, not
   per-app integration. Server: POST /input/scroll {dx,dy} via

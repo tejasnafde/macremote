@@ -110,6 +110,31 @@ sys.exit(resp["exit_code"])
 
 
 @pytest.fixture
+def browser_registry(monkeypatch):
+    """A fresh BrowserSessionRegistry with a fake, test-controlled clock so
+    TTL expiry can be exercised without real sleeps, and so state never
+    leaks between tests (the registry is otherwise a module-level singleton).
+    """
+    from handler import browser_sessions
+
+    class FakeClock:
+        def __init__(self):
+            self.now = 1_000_000.0
+
+        def __call__(self) -> float:
+            return self.now
+
+        def tick(self, seconds: float) -> None:
+            self.now += seconds
+
+    clock = FakeClock()
+    fresh = browser_sessions.BrowserSessionRegistry(clock=clock)
+    fresh.clock = clock  # exposed so tests can fast-forward: browser_registry.clock.tick(16)
+    monkeypatch.setattr(browser_sessions, "registry", fresh)
+    return fresh
+
+
+@pytest.fixture
 def client(monkeypatch):
     """TestClient with test-safe settings applied before the app's lifespan runs
     (so startup's Discord lifecycle post never hits a real webhook)."""

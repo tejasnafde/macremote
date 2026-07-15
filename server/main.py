@@ -14,7 +14,7 @@ from common_helper.discord_alert import alert, send_lifecycle
 from common_helper.hs_bridge import HSError
 from common_helper.version import get_version
 from handler.sleep_timer_handler import sleep_timer_service
-from routers import brightness, displays, media, meta, sleep_timer, status, system, volume
+from routers import brightness, browser, displays, media, meta, sleep_timer, status, system, volume
 
 
 @asynccontextmanager
@@ -29,6 +29,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="macremote", version=get_version(), lifespan=lifespan)
 
 app.include_router(meta.router)
+app.include_router(browser.router)
 app.include_router(media.router)
 app.include_router(volume.router)
 app.include_router(brightness.router)

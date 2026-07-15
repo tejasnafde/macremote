@@ -6,6 +6,7 @@ import json
 from common_helper import lua_snippets as lua
 from common_helper.decorators import log_timing
 from common_helper.hs_bridge import HSError, run_hs
+from handler import browser_sessions
 from handler.sleep_timer_handler import sleep_timer_service
 
 
@@ -26,4 +27,14 @@ async def get_status() -> dict:
         if remaining is not None
         else None
     )
+    data["browser_tabs"] = [
+        {
+            "tab_id": tab["tab_id"],
+            "browser": tab["browser"],
+            "title": tab["title"],
+            "playing": tab["playing"],
+            "audible": tab["audible"],
+        }
+        for tab in browser_sessions.registry.list_tabs()
+    ]
     return data

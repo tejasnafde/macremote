@@ -30,10 +30,18 @@ C="$(curl -s -o /dev/null -w '%{http_code}' -m 4 "$BASE/status")"
 
 # 3. status shape
 C="$(code "$BASE/status")"
-if [ "$C" = 200 ] && jq -e 'has("volume") and has("muted") and has("brightness") and has("battery") and has("sleep_timer")' /tmp/e2e_body >/dev/null 2>&1; then
+if [ "$C" = 200 ] && jq -e 'has("volume") and has("muted") and has("brightness") and has("battery") and has("sleep_timer") and has("browser_tabs")' /tmp/e2e_body >/dev/null 2>&1; then
   ok "GET /status 200 with expected fields: $(cat /tmp/e2e_body)"
 else
   bad "GET /status shape (code $C: $(cat /tmp/e2e_body))"
+fi
+
+# 3b. browser_tabs is always an array (empty is fine - no extension connected)
+C="$(code "$BASE/status")"
+if [ "$C" = 200 ] && jq -e '.browser_tabs | type == "array"' /tmp/e2e_body >/dev/null 2>&1; then
+  ok "GET /status browser_tabs is an array ($(jq -c '.browser_tabs' /tmp/e2e_body))"
+else
+  bad "GET /status browser_tabs shape (code $C: $(cat /tmp/e2e_body))"
 fi
 
 # 4. absolute volume set + OS readback + restore

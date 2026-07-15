@@ -21,6 +21,9 @@ app/ios/
 *.apk
 *.aab
 
+# Browser extension build output
+extension/dist/
+
 # macOS / logs / editors
 .DS_Store
 *.log

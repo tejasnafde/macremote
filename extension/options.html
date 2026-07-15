@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>macremote Browser Bridge</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="card">
+      <h1>macremote Browser Bridge</h1>
+      <p class="subtitle">
+        Connect this browser to your macremote server so the phone app can
+        see and control audible tabs.
+      </p>
+
+      <label for="server-url">Server URL</label>
+      <input
+        id="server-url"
+        type="text"
+        placeholder="http://100.x.x.x:8484"
+        autocomplete="off"
+        spellcheck="false"
+      />
+
+      <label for="token">API token</label>
+      <input
+        id="token"
+        type="password"
+        placeholder="Bearer token from server/.env"
+        autocomplete="off"
+        spellcheck="false"
+      />
+
+      <div class="actions">
+        <button id="save" class="primary">Save</button>
+        <button id="test">Test connection</button>
+      </div>
+
+      <p id="status" class="status" role="status"></p>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
