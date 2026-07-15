@@ -18,6 +18,13 @@ for _, ext in ipairs({
   pcall(function() return hs[ext] end)
 end
 
+-- macremote is the engine the server drives; it must stay running all day.
+-- Start at login automatically and hide the dock icon so it is invisible and
+-- the user never has to launch or think about it. (Menubar icon stays so it is
+-- discoverable if ever needed.)
+pcall(function() hs.autoLaunch(true) end)
+pcall(function() hs.dockIcon(false) end)
+
 macremote = {}
 
 -- Is an app already running? hs.application.get(bundleID) returns nil without

@@ -29,13 +29,15 @@ def media_seek(delta_seconds: int) -> str:
     d = int(delta_seconds)
     key = "right" if d > 0 else "left"
     presses = 1 if abs(d) < 10 else 2
+    # Gate on hs.application.get (does NOT launch) instead of isRunning() /
+    # tell application, which LaunchServices would start if the app is closed.
     return (
         f"local d = {d}; "
-        "if hs.spotify and hs.spotify.isRunning() then "
+        "if hs.application.get('com.spotify.client') then "
         "local st = hs.spotify.getPlaybackState(); "
         "if st == hs.spotify.state_playing or st == hs.spotify.state_paused then "
         "hs.spotify.setPosition(math.max(0, hs.spotify.getPosition() + d)); return 'spotify' end end; "
-        "if hs.itunes and hs.itunes.isRunning and hs.itunes.isRunning() then "
+        "if hs.application.get('com.apple.Music') then "
         "local ok = hs.osascript.applescript("
         "'tell application \"Music\" to set player position to (player position + ' .. d .. ')'); "
         "if ok then return 'music' end end; "
@@ -139,3 +141,12 @@ STATUS = (
     "nowplaying = macremote.nowPlaying()"
     "})"
 )
+
+
+# ── Focus an app by bundle id ────────────────────────────────────────────────
+# Raises the app to the foreground on whichever Space/display its window is on.
+# Used when the phone focuses a browser tab: the extension switches the tab, but
+# only the Mac can bring the backgrounded browser app itself to the front.
+def focus_app(bundle_id: str) -> str:
+    safe = bundle_id.replace('"', '')
+    return f'hs.application.launchOrFocusByBundleID("{safe}")'

@@ -8,9 +8,9 @@
  *
  * Loop, driven by chrome.alarms (survives service worker eviction - each
  * alarm fire wakes this script back up):
- *   - every 5s: collect audible tabs + any tab we last saw playing within
- *     the last 5 minutes (so a paused tab stays controllable), report the
- *     full list to the server.
+ *   - every 5s: collect audible tabs + any tab we have seen play that is still
+ *     open (so a paused tab stays controllable until its tab is closed),
+ *     report the full list to the server.
  *   - poll /browser/commands every 2s while we know about at least one
  *     media tab, otherwise every 15s (idle, nothing to control).
  *
@@ -28,7 +28,6 @@ const POLL_ALARM = "macremote-poll";
 const REPORT_INTERVAL_SECONDS = 5;
 const POLL_INTERVAL_ACTIVE_SECONDS = 2;
 const POLL_INTERVAL_IDLE_SECONDS = 15;
-const KNOWN_TAB_TTL_MS = 5 * 60 * 1000;
 const KNOWN_TABS_KEY = "macremoteKnownTabs";
 
 function hostFromUrl(url) {
@@ -97,12 +96,13 @@ async function collectAndReport() {
     };
   }
 
-  // Carry over tabs we last saw playing (or muted-but-playing, which never
-  // shows up as "audible") so they stay controllable for a while after they
-  // go quiet, instead of vanishing from the phone the instant playback pauses.
+  // Carry over any tab we have seen play, for as long as it stays OPEN (not on
+  // a timer): a video you paused to listen to music might sit paused for an
+  // hour, and you still want to resume it from the phone. It drops out only
+  // when the tab is actually closed (tabs.get throws). Quiet tabs report as
+  // paused (playing:false, audible:false) so the phone shows the right icon.
   for (const [tabIdKey, entry] of Object.entries(known)) {
     if (nextKnown[tabIdKey]) continue;
-    if (now - entry.lastSeenAt > KNOWN_TAB_TTL_MS) continue;
     try {
       const tab = await api.tabs.get(Number(tabIdKey));
       nextKnown[tabIdKey] = {
@@ -110,6 +110,7 @@ async function collectAndReport() {
         title: tab.title || entry.title,
         urlHost: hostFromUrl(tab.url) || entry.urlHost,
         audible: false,
+        playing: false,
       };
     } catch (err) {
       // Tab was closed - let it drop out of the known set.
