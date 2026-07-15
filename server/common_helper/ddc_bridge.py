@@ -66,7 +66,9 @@ def parse_display_list(raw: str) -> list[dict]:
             continue
         index = int(match.group(1))
         name = match.group(2).strip()
+        # "(null)" is m1ddc's phantom entry: DDC writes report success but never
+        # stick (verified on real hardware), so it is not a controllable display.
         if not name or name == "(null)":
-            name = f"Display {index}"
+            continue
         displays.append({"index": index, "name": name})
     return displays

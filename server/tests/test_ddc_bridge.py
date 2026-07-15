@@ -15,8 +15,9 @@ SAMPLE_LIST = (
 
 
 def test_parse_display_list_canned_sample():
+    # The "(null)" phantom is dropped (DDC writes never stick on it); only the
+    # real, named monitor survives.
     assert parse_display_list(SAMPLE_LIST) == [
-        {"index": 1, "name": "Display 1"},
         {"index": 2, "name": "LG ULTRAGEAR"},
     ]
 

@@ -139,7 +139,7 @@ export function DevicesScreen({
   return (
     <ScrollView
       style={styles.root}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 76 }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 76 }]}
     >
       <Text style={styles.head}>My Devices</Text>
       <Text style={styles.sub}>Control any machine on your network.</Text>
@@ -264,7 +264,7 @@ function DeviceRow({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.ink950 },
-  content: { paddingHorizontal: spacing.screenX + 2, paddingTop: 14 },
+  content: { paddingHorizontal: spacing.screenX + 2 },
   head: { fontFamily: fonts.display, fontSize: 24, color: colors.off, marginTop: 8 },
   sub: { fontFamily: fonts.body, fontSize: 13, color: colors.off55, marginTop: 6, marginBottom: 20 },
   row: {
