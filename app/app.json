@@ -72,6 +72,6 @@
       },
       "checkAutomatically": "ON_LOAD"
     },
-    "runtimeVersion": "native-1"
+    "runtimeVersion": "native-2"
   }
 }
