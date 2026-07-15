@@ -174,14 +174,26 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
       pollRef.current = setInterval(refreshStatus, POLL_MS);
     }
     startPolling();
+    // Kill any running brightness/volume hold-repeat when we lose focus, so a
+    // press whose release we never saw can't keep firing in the background.
+    function stopHolds() {
+      if (brightHold.current) {
+        clearInterval(brightHold.current);
+        brightHold.current = null;
+      }
+    }
     let appState = AppState.currentState;
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'active' && appState !== 'active') startPolling();
-      else if (next !== 'active') stopPolling();
+      else if (next !== 'active') {
+        stopPolling();
+        stopHolds();
+      }
       appState = next;
     });
     return () => {
       stopPolling();
+      stopHolds();
       sub.remove();
     };
   }, [refreshStatus, refreshToken]);
@@ -303,6 +315,13 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   }
 
   const brightHold = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Safety cap: a held brightness button repeats, but if the press-out event is
+  // ever lost (finger slides off, gesture cancelled, app backgrounded mid-press)
+  // an uncapped interval would drive brightness to 0/100 forever and fight any
+  // manual change on the Mac. 18 steps x 6 = full 0..100 range, then it stops on
+  // its own and the user re-presses to continue.
+  const MAX_BRIGHT_REPEATS = 18;
+  const brightRepeats = useRef(0);
   function startBrightnessHold(direction: 'up' | 'down') {
     const target = currentBrightnessTarget();
     const action = () => (direction === 'up' ? api.brightnessUp(target) : api.brightnessDown(target));
@@ -323,7 +342,13 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
         }
         toast.show(direction === 'up' ? 'Brightness up' : 'Brightness down', 1100);
         if (brightHold.current) clearInterval(brightHold.current);
+        brightRepeats.current = 0;
         brightHold.current = setInterval(() => {
+          if (brightRepeats.current >= MAX_BRIGHT_REPEATS) {
+            stopBrightnessHold();
+            return;
+          }
+          brightRepeats.current += 1;
           action().catch(() => undefined);
         }, 220);
       })

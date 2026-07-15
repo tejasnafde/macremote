@@ -31,6 +31,21 @@ def _sanitize(stdout: str) -> str:
     return lines[-1].strip() if lines else ""
 
 
+# Transient Hammerspoon IPC failures worth one retry (vs a real Lua error):
+#  - "ipc port is no longer valid": the CLI hit the old port right after a reload
+#  - the CLI itself crashing (SIGABRT / NSDestinationInvalidException / target
+#    thread exited): HS 1.1.1 IPC on macOS 26 occasionally aborts a CLI call
+_TRANSIENT_IPC_MARKERS = (
+    "ipc port is no longer valid",
+    "NSDestinationInvalidException",
+    "target thread exited",
+)
+
+
+def _is_transient_ipc(stderr: str) -> bool:
+    return any(m in stderr for m in _TRANSIENT_IPC_MARKERS)
+
+
 def _invoke(lua: str) -> subprocess.CompletedProcess:
     with _hs_lock:
         return subprocess.run(
@@ -54,7 +69,7 @@ def run_hs(lua: str) -> str:
     """
     try:
         result = _invoke(lua)
-        if result.returncode != 0 and "ipc port is no longer valid" in result.stderr:
+        if result.returncode != 0 and _is_transient_ipc(result.stderr):
             time.sleep(0.4)
             result = _invoke(lua)
     except subprocess.TimeoutExpired as exc:

@@ -82,10 +82,22 @@ export function VolumeRail({
   }, []);
 
   const stepStateRef = useRef(0);
+  const holdCountRef = useRef(0);
+  // Hard cap so a lost press-release (finger slides off, gesture cancelled)
+  // cannot repeat forever. 20 x STEP covers the full 0..100 range.
+  const MAX_HOLD_REPEATS = 20;
   const startHold = useCallback(
     (direction: 1 | -1) => {
       const apply = () => {
-        const next = Math.max(0, Math.min(100, stepStateRef.current + direction * STEP));
+        const prev = stepStateRef.current;
+        const next = Math.max(0, Math.min(100, prev + direction * STEP));
+        // Reached 0/100 (clamped, no movement) or hit the safety cap: stop
+        // instead of hammering the server with no-op sets forever.
+        if (next === prev || holdCountRef.current >= MAX_HOLD_REPEATS) {
+          clearHold();
+          return;
+        }
+        holdCountRef.current += 1;
         stepStateRef.current = next;
         displayVolume.value = withTiming(next, {
           duration: 280,
@@ -95,6 +107,7 @@ export function VolumeRail({
         onCommitVolume(next);
       };
       stepStateRef.current = displayVolume.value;
+      holdCountRef.current = 0;
       apply();
       clearHold();
       holdTimer.current = setInterval(apply, HOLD_REPEAT_MS);
