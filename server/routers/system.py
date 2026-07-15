@@ -29,6 +29,13 @@ async def blackout() -> dict:
     return {"ok": True}
 
 
+@router.post("/screens-on")
+async def screens_on() -> dict:
+    """Undo blackout: restore volume and brightness to pre-blackout levels."""
+    await system_handler.screens_on()
+    return {"ok": True}
+
+
 @router.post("/banish-cursor")
 async def banish_cursor() -> dict:
     """Park the pointer in the corner: fixes the stuck cursor over fullscreen video."""

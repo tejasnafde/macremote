@@ -30,7 +30,9 @@ async def _external_displays() -> list[dict]:
         raw = await asyncio.to_thread(run_m1ddc, ["display", "list"])
     except DDCError:
         return []
-    return parse_display_list(raw)
+    # m1ddc lists a phantom "(null)" entry on some Macs; controlling it always
+    # fails, so hide it.
+    return [d for d in parse_display_list(raw) if d.get("name") and d["name"] != "(null)"]
 
 
 async def _external_brightness(index: int) -> int | None:

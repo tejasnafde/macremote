@@ -36,6 +36,7 @@ interface SleepSheetProps {
   onCancelTimer: () => void;
   onSleepNow: () => void;
   onBlackoutNow: () => void;
+  onScreensOn: () => void;
 }
 
 type TransientMode = 'confirm' | 'done' | 'edit' | null;
@@ -49,6 +50,7 @@ export function SleepSheet({
   onCancelTimer,
   onSleepNow,
   onBlackoutNow,
+  onScreensOn,
 }: SleepSheetProps) {
   const insets = useSafeAreaInsets();
   const [transientMode, setTransientMode] = useState<TransientMode>(null);
@@ -213,6 +215,15 @@ export function SleepSheet({
                   }}
                 >
                   <Text style={styles.sleepNowLinkText}>Screens off now</Text>
+                </PressableScale>
+                <PressableScale
+                  style={styles.sleepNowLink}
+                  onPress={() => {
+                    onScreensOn();
+                    onClose();
+                  }}
+                >
+                  <Text style={styles.sleepNowLinkText}>Screens on</Text>
                 </PressableScale>
               </View>
             )}

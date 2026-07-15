@@ -151,6 +151,8 @@ export const api = {
   sleep: (): Promise<void> => request('/system/sleep', { method: 'POST' }),
   /** Volume 0 + brightness 0 on every display; the Mac stays awake. */
   blackout: (): Promise<void> => request('/system/blackout', { method: 'POST' }),
+  /** Undo blackout: restore volume and brightness to pre-blackout levels. */
+  screensOn: (): Promise<void> => request('/system/screens-on', { method: 'POST' }),
   /** Parks the Mac's pointer in the screen corner (stuck-cursor-over-fullscreen-video fix). */
   banishCursor: (): Promise<void> => request('/system/banish-cursor', { method: 'POST' }),
 

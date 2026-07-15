@@ -54,3 +54,31 @@ async def test_blackout_expiry_skips_sleep_and_restore():
     assert not any("setOutputVolume(math.max(0, math.min(100, 62)))" in c for c in hs_calls), (
         "blackout must not restore volume"
     )
+
+
+def test_screens_on_restores_after_blackout(client, fake_hs, fake_m1ddc):
+    fake_hs.set_output("55")  # VOLUME_GET and BRIGHTNESS_GET readbacks
+    client.post("/system/blackout", headers=AUTH_HEADERS)
+    fake_hs.calls.clear()
+    resp = client.post("/system/screens-on", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert any("setOutputVolume(math.max(0, math.min(100, 55)))" in c for c in fake_hs.calls)
+    assert any("hs.brightness.set(math.max(0, math.min(100, 55)))" in c for c in fake_hs.calls)
+
+
+def test_screens_on_without_prior_blackout_uses_defaults(client, fake_hs, fake_m1ddc):
+    import handler.system_handler as sh
+
+    sh._blackout_snapshot = None
+    resp = client.post("/system/screens-on", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert any("min(100, 40)" in c for c in fake_hs.calls)
+    assert any("min(100, 60)" in c for c in fake_hs.calls)
+
+
+def test_displays_hides_phantom_null_entry(client, fake_hs, fake_m1ddc):
+    fake_m1ddc.set_response("display list", "[1] (null) (id 5)\n[2] LG ULTRAGEAR (id 7)\n")
+    fake_hs.set_output("50")
+    resp = client.get("/displays", headers=AUTH_HEADERS)
+    names = [d["name"] for d in resp.json()["displays"]]
+    assert "(null)" not in names

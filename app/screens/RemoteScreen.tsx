@@ -353,6 +353,14 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
       toast.show(errMessage(err));
     }
   }
+  async function handleScreensOn() {
+    try {
+      await api.screensOn();
+      toast.show('Restoring volume and screens', 1800);
+    } catch (err) {
+      toast.show(errMessage(err));
+    }
+  }
 
   async function handleRetry() {
     setRetrying(true);
@@ -465,22 +473,18 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
                   >
                     <IconBrightnessUp size={17} color={colors.off72} />
                   </PressableScale>
-                  {hasMultipleDisplays && (
-                    <PressableScale
-                      style={styles.displayBadge}
-                      onPress={() => setDisplayChooserOpen(true)}
-                      accessibilityLabel="Choose brightness target display"
-                      hitSlop={8}
-                    >
-                      <IconChevronDouble size={7} color={colors.off72} />
-                    </PressableScale>
-                  )}
                 </View>
               </View>
-              {showBrightnessTargetLabel && (
-                <Text style={styles.brightTargetLabel} numberOfLines={1}>
-                  {activeDisplay!.name}
-                </Text>
+              {hasMultipleDisplays && (
+                <PressableScale
+                  onPress={() => setDisplayChooserOpen(true)}
+                  accessibilityLabel="Choose brightness target display"
+                  hitSlop={10}
+                >
+                  <Text style={styles.brightTargetLabel} numberOfLines={1}>
+                    {activeDisplay?.name ?? 'Built-in'}
+                  </Text>
+                </PressableScale>
               )}
             </View>
             <PressableScale style={styles.sBtn} onPress={handleLockPress} accessibilityLabel="Lock">
@@ -530,6 +534,7 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
         onCancelTimer={handleCancelTimer}
         onSleepNow={handleSleepNow}
         onBlackoutNow={handleBlackoutNow}
+        onScreensOn={handleScreensOn}
       />
     </View>
   );

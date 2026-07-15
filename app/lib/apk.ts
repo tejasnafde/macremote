@@ -60,10 +60,9 @@ export function currentVersion(): string {
  */
 export async function checkForUpdate(force = false): Promise<LatestRelease | null> {
   if (Platform.OS !== 'android') return null;
-  if (!force) {
-    const last = await getLastUpdateCheck();
-    if (Date.now() - last < CHECK_THROTTLE_MS) return null;
-  }
+  // No throttle: one unauthenticated GitHub API call per launch is nothing,
+  // and the daily throttle hid real releases from the launch check.
+  void force;
   await setLastUpdateCheck(Date.now());
   const latest = await fetchLatestRelease();
   if (!latest) return null;
