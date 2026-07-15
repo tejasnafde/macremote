@@ -73,7 +73,9 @@ def test_brightness_set_external(client, fake_m1ddc):
     assert fake_m1ddc.calls == ["display 1 set luminance 60"]
 
 
-def test_brightness_external_m1ddc_failure_returns_502_and_alerts(client, fake_m1ddc, monkeypatch):
+def test_brightness_external_ddc_failure_is_graceful_no_alert(client, fake_m1ddc, monkeypatch):
+    # A monitor ignoring DDC is expected, not a server fault: 200 with
+    # display_unsupported, and no Discord alert (it would spam on every tap).
     fake_m1ddc.set_default("DDC communication failure", exit_code=1)
 
     alert_calls = []
@@ -81,9 +83,9 @@ def test_brightness_external_m1ddc_failure_returns_502_and_alerts(client, fake_m
 
     resp = client.post("/brightness/up?display=1", headers=AUTH_HEADERS)
 
-    assert resp.status_code == 502
-    assert resp.json() == {"error": "ddc bridge failed"}
-    assert len(alert_calls) == 1
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": False, "display_unsupported": True}
+    assert alert_calls == []
 
 
 def test_brightness_up_requires_auth(client):

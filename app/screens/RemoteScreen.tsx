@@ -284,12 +284,21 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
   function startBrightnessHold(direction: 'up' | 'down') {
     const target = currentBrightnessTarget();
     const action = () => (direction === 'up' ? api.brightnessUp(target) : api.brightnessDown(target));
-    action().catch(() => undefined);
-    toast.show(direction === 'up' ? 'Brightness up' : 'Brightness down', 1100);
-    if (brightHold.current) clearInterval(brightHold.current);
-    brightHold.current = setInterval(() => {
-      action().catch(() => undefined);
-    }, 220);
+    // First tap awaits the result: if the external monitor ignores DDC, say so
+    // once and skip the hold-repeat (pointless to hammer an unsupported display).
+    action()
+      .then((res) => {
+        if (res?.display_unsupported) {
+          toast.show('This display ignores brightness control (DDC off or blocked)', 2600);
+          return;
+        }
+        toast.show(direction === 'up' ? 'Brightness up' : 'Brightness down', 1100);
+        if (brightHold.current) clearInterval(brightHold.current);
+        brightHold.current = setInterval(() => {
+          action().catch(() => undefined);
+        }, 220);
+      })
+      .catch(() => undefined);
   }
   function stopBrightnessHold() {
     if (brightHold.current) {

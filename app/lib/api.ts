@@ -82,6 +82,12 @@ export interface DisplaysResponse {
   displays: Display[];
 }
 
+export interface BrightnessResult {
+  ok: boolean;
+  /** true when an external monitor ignored the DDC command (unsupported, not an error). */
+  display_unsupported?: boolean;
+}
+
 async function requestWithConfig<T>(
   cfg: { url: string; token: string },
   path: string,
@@ -151,10 +157,11 @@ export const api = {
   setVolume: (level: number): Promise<void> =>
     request('/volume', { method: 'PUT', body: JSON.stringify({ level }) }),
 
-  /** display is a /displays id ("builtin" or an external index); omit for classic single-display behavior. */
-  brightnessUp: (display?: string): Promise<void> =>
+  /** display is a /displays id ("builtin" or an external index); omit for classic single-display behavior.
+   *  Resolves to {ok:false, display_unsupported:true} when an external monitor ignores DDC (not an error). */
+  brightnessUp: (display?: string): Promise<BrightnessResult> =>
     request(`/brightness/up${display ? `?display=${encodeURIComponent(display)}` : ''}`, { method: 'POST' }),
-  brightnessDown: (display?: string): Promise<void> =>
+  brightnessDown: (display?: string): Promise<BrightnessResult> =>
     request(`/brightness/down${display ? `?display=${encodeURIComponent(display)}` : ''}`, { method: 'POST' }),
 
   displays: (): Promise<DisplaysResponse> => request<DisplaysResponse>('/displays'),
