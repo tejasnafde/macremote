@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import androidx.core.app.ServiceCompat
 import androidx.media.session.MediaButtonReceiver
 
 /**
@@ -19,16 +18,18 @@ class MediaNotificationService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    // Framework Service.startForeground (not ServiceCompat, whose 4-arg
+    // overload is absent in the resolved androidx.core version). The 3-arg
+    // typed overload exists from API 29 (Q); guard it.
     val notification = MediaNotificationManager.buildNotification(this)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-      ServiceCompat.startForeground(
-        this,
+      startForeground(
         MediaNotificationManager.NOTIFICATION_ID,
         notification,
         ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
       )
     } else {
-      ServiceCompat.startForeground(this, MediaNotificationManager.NOTIFICATION_ID, notification, 0)
+      startForeground(MediaNotificationManager.NOTIFICATION_ID, notification)
     }
 
     // No-op unless this is an ACTION_MEDIA_BUTTON intent; then it dispatches
@@ -39,7 +40,7 @@ class MediaNotificationService : Service() {
   }
 
   override fun onDestroy() {
-    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+    stopForeground(STOP_FOREGROUND_REMOVE)
     super.onDestroy()
   }
 }

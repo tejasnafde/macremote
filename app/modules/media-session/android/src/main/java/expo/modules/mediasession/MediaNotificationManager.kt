@@ -43,11 +43,10 @@ object MediaNotificationManager {
 
   fun ensureSession(context: Context): MediaSessionCompat {
     mediaSession?.let { return it }
+    // FLAG_HANDLES_MEDIA_BUTTON_KEYS / FLAG_HANDLES_TRANSPORT_CONTROLS were
+    // removed in androidx.media 1.7.0 (both are enabled by default now), so no
+    // setFlags call is needed.
     val session = MediaSessionCompat(context.applicationContext, SESSION_TAG).apply {
-      setFlags(
-        MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTON_KEYS or
-          MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-      )
       setCallback(object : MediaSessionCompat.Callback() {
         override fun onPlay() = dispatch("playpause")
         override fun onPause() = dispatch("playpause")
