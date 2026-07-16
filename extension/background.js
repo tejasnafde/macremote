@@ -190,25 +190,27 @@ async function toggleMute(tabId) {
 }
 
 async function seekTab(tabId, seconds) {
+  const delta = Number(seconds) || 0;
+  if (!delta) return;
   try {
     await api.scripting.executeScript({
       target: { tabId },
-      args: [seconds],
-      func: (delta) => {
-        const media = Array.from(document.querySelectorAll("video, audio"));
+      args: [delta],
+      func: (d) => {
+        // Only consider real, seekable media with a finite duration. YouTube /
+        // YT Music often have extra <video> elements (ads, previews) with NaN
+        // duration; picking one of those made currentTime a NaN no-op before.
+        const media = Array.from(document.querySelectorAll("video, audio")).filter(
+          (el) => Number.isFinite(el.duration) && el.duration > 0
+        );
         if (media.length === 0) return;
-        const playing = media.find((el) => !el.paused);
-        const target =
-          playing ||
-          media.reduce((largest, el) => {
-            const area = (el.videoWidth || el.clientWidth || 0) * (el.videoHeight || el.clientHeight || 0);
-            const largestArea = (largest.videoWidth || largest.clientWidth || 0) * (largest.videoHeight || largest.clientHeight || 0);
-            return area > largestArea ? el : largest;
-          });
-        if (Number.isFinite(target.duration)) {
-          target.currentTime = Math.max(0, Math.min(target.duration, target.currentTime + delta));
-        } else {
-          target.currentTime = Math.max(0, target.currentTime + delta);
+        const el = media.find((m) => !m.paused) || media.reduce((a, b) => (b.duration > a.duration ? b : a));
+        const t = Math.max(0, Math.min(el.duration, (el.currentTime || 0) + d));
+        try {
+          if (typeof el.fastSeek === "function") el.fastSeek(t);
+          else el.currentTime = t;
+        } catch (e) {
+          el.currentTime = t;
         }
       },
     });

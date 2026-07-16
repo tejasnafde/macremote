@@ -83,12 +83,26 @@ VOLUME_GET = (
 # ── Brightness ─────────────────────────────────────────────────────────────────
 # hs.brightness.get()/set() operate on 0-100.
 
+# Built-in brightness via the hardware brightness KEYS, not hs.brightness.set/
+# get, which is slow and frequently times out (5s) on Apple Silicon. Key events
+# are instant and never hang. Each press = one OS brightness step; hold-repeat
+# gives range. (step arg kept for signature symmetry with the external path.)
+BRIGHTNESS_KEY_UP = (
+    'hs.eventtap.event.newSystemKeyEvent("BRIGHTNESS_UP", true):post(); '
+    'hs.eventtap.event.newSystemKeyEvent("BRIGHTNESS_UP", false):post()'
+)
+BRIGHTNESS_KEY_DOWN = (
+    'hs.eventtap.event.newSystemKeyEvent("BRIGHTNESS_DOWN", true):post(); '
+    'hs.eventtap.event.newSystemKeyEvent("BRIGHTNESS_DOWN", false):post()'
+)
+
+
 def brightness_up(step: int) -> str:
-    return f"hs.brightness.set(math.min(100, hs.brightness.get() + {step}))"
+    return BRIGHTNESS_KEY_UP
 
 
 def brightness_down(step: int) -> str:
-    return f"hs.brightness.set(math.max(0, hs.brightness.get() - {step}))"
+    return BRIGHTNESS_KEY_DOWN
 
 
 def brightness_set(level: int) -> str:
