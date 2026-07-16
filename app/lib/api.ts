@@ -88,6 +88,29 @@ export interface BrightnessResult {
   display_unsupported?: boolean;
 }
 
+/** Navigation keys the server's /input/key endpoint accepts (422 on anything else). */
+export type NavKey =
+  | 'left'
+  | 'right'
+  | 'up'
+  | 'down'
+  | 'pageup'
+  | 'pagedown'
+  | 'space'
+  | 'home'
+  | 'end';
+
+export interface AppEntry {
+  name: string;
+  bundle_id: string;
+  /** true for the frontmost app; the list is returned frontmost first. */
+  active: boolean;
+}
+
+export interface AppsResponse {
+  apps: AppEntry[];
+}
+
 async function requestWithConfig<T>(
   cfg: { url: string; token: string },
   path: string,
@@ -186,6 +209,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ action, browser, ...(value !== undefined ? { value } : {}) }),
     }),
+
+  /** Scroll the frontmost Mac app by a pixel delta (server clamps each axis to -4000..4000). */
+  inputScroll: (dx: number, dy: number): Promise<void> =>
+    request('/input/scroll', { method: 'POST', body: JSON.stringify({ dx: Math.round(dx), dy: Math.round(dy) }) }),
+  /** Send a single navigation key to the frontmost app (422 if not in the allowed set). */
+  inputKey: (key: NavKey): Promise<void> =>
+    request('/input/key', { method: 'POST', body: JSON.stringify({ key }) }),
+
+  /** Running apps, frontmost first (active:true on the frontmost). */
+  listApps: (): Promise<AppsResponse> => request<AppsResponse>('/apps'),
+  /** Raise the app with this bundle id to the front. */
+  focusApp: (bundleId: string): Promise<void> =>
+    request('/apps/focus', { method: 'POST', body: JSON.stringify({ bundle_id: bundleId }) }),
 
   status: (): Promise<StatusResponse> => request<StatusResponse>('/status'),
   health: (): Promise<HealthResponse> => request<HealthResponse>('/health'),

@@ -338,12 +338,33 @@ or `app.json` change, no new dependencies.
     reused `IconPlay`/`IconPause`/`IconMute`. Pure TS/TSX, no new
     dependencies, no `app.json` change. `npm run typecheck` and `npx expo
     export --platform android` both green.
-- Reading mode: trackpad-like control for manga/light novels in browser AND
+- [x] Reading mode: trackpad-like control for manga/light novels in browser AND
   Readest.app (confirmed installed). Lazy path: a generic input surface, not
   per-app integration. Server: POST /input/scroll {dx,dy} via
   hs.eventtap.newScrollEvent, POST /input/key {key} for arrows/page/space.
-  App: a swipe/drag gesture pad screen (drag = scroll, tap zones = page turn).
-  Covers browser scrolling and Readest page turns with one feature.
+  App: `screens/ReadingScreen.tsx` — a full-screen pad. One `Gesture.Race(pan,
+  tap)`: the vertical Pan drives `/input/scroll` throttled to ~18Hz
+  (NETWORK_THROTTLE_MS=55) with the sub-pixel remainder accumulated across
+  frames (same intent as VolumeRail's `sendThrottled`); tapping the left/right
+  third fires `/input/key`. Scroll sign: dragging the finger UP advances the
+  page (positive dy, "push the page up to read on"), flip via the one
+  `ADVANCE_SIGN` constant if a Mac inverts. Page-turn key mode (Arrows =
+  left/right vs Space/Page = space/pageup) persists in AsyncStorage
+  (`settings.getReadingPageMode`, default Arrows) and drives both the tap zones
+  and the control-bar prev/next buttons. New `NavKey` union + `api.inputScroll`
+  / `api.inputKey` typed clients; new `IconBook`/`IconChevronLeft`/
+  `IconChevronRight`/`IconArrowLeft` in the existing stroke style. Reached from
+  the Remote status strip's book icon. Pure TS/TSX, no new deps, no app.json
+  change. `npm run typecheck` and `npx expo export --platform android` green.
+- [x] App switcher: `screens/AppsScreen.tsx` — GET /apps on mount (frontmost
+  first, active dot/"Active" tag on the frontmost), tap a row -> POST
+  /apps/focus, toast "Switched to <name>", re-pull after ~500ms so the active
+  dot lands on the new frontmost. Pull-to-refresh + header refresh button.
+  Loading / offline (WifiOff + Retry) / empty states mirror DevicesScreen, and
+  the row/list styling is lifted straight from it. New `api.listApps` /
+  `api.focusApp` + `AppEntry` type; new `IconApps` grid glyph. Reached from the
+  Remote status strip's grid icon. Both screens carry a back arrow to Remote,
+  presented via App.tsx mode switching like Devices. Pure TS/TSX, no new deps.
 - Widget play/pause: consider optimistic icon flip via stored flag if the
   combined glyph feels off.
 

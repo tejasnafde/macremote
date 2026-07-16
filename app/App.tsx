@@ -7,11 +7,13 @@ import { useFonts } from 'expo-font';
 import { colors, fontModules } from './theme';
 import { hasAnyDevice } from './lib/devices';
 import { ToastProvider } from './components/Toast';
+import { AppsScreen } from './screens/AppsScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
+import { ReadingScreen } from './screens/ReadingScreen';
 import { RemoteScreen } from './screens/RemoteScreen';
 import { SetupScreen } from './screens/SetupScreen';
 
-type Mode = 'loading' | 'setup' | 'devices' | 'remote';
+type Mode = 'loading' | 'setup' | 'devices' | 'remote' | 'reading' | 'apps';
 
 export default function App() {
   const [fontsLoaded] = useFonts(fontModules);
@@ -52,8 +54,15 @@ export default function App() {
               <DevicesScreen onSwitched={goRemote} onAddDevice={() => setMode('setup')} />
             )}
             {mode === 'remote' && (
-              <RemoteScreen onOpenDevices={() => setMode('devices')} refreshToken={refreshToken} />
+              <RemoteScreen
+                onOpenDevices={() => setMode('devices')}
+                onOpenReading={() => setMode('reading')}
+                onOpenApps={() => setMode('apps')}
+                refreshToken={refreshToken}
+              />
             )}
+            {mode === 'reading' && <ReadingScreen onClose={() => setMode('remote')} />}
+            {mode === 'apps' && <AppsScreen onClose={() => setMode('remote')} />}
           </View>
         </ToastProvider>
       </SafeAreaProvider>

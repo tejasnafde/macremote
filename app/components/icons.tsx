@@ -331,3 +331,53 @@ export function IconMoon({ size = 24, color = '#f3f5f1' }: IconProps) {
     </Svg>
   );
 }
+
+export function IconBook({ size = 20, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 6.2C10.4 5 8.2 4.6 5.2 4.6a1 1 0 0 0-1 1v11.3a1 1 0 0 0 1 1c3 0 5.2.4 6.8 1.6 1.6-1.2 3.8-1.6 6.8-1.6a1 1 0 0 0 1-1V5.6a1 1 0 0 0-1-1c-3 0-5.2.4-6.8 1.6Z"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+      />
+      <Path d="M12 6.2v13.3" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function IconChevronLeft({ size = 20, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M14.5 5 8 12l6.5 7" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function IconChevronRight({ size = 20, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9.5 5 16 12l-6.5 7" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function IconApps({ size = 20, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={3.5} y={3.5} width={7} height={7} rx={2} stroke={color} strokeWidth={1.6} />
+      <Rect x={13.5} y={3.5} width={7} height={7} rx={2} stroke={color} strokeWidth={1.6} />
+      <Rect x={3.5} y={13.5} width={7} height={7} rx={2} stroke={color} strokeWidth={1.6} />
+      <Rect x={13.5} y={13.5} width={7} height={7} rx={2} stroke={color} strokeWidth={1.6} />
+    </Svg>
+  );
+}
+
+export function IconArrowLeft({ size = 20, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M19 12H5" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M11 6 5 12l6 6" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}

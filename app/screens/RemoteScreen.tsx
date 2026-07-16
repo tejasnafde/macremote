@@ -17,8 +17,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PressableScale } from '../components/PressableScale';
 import { useToast } from '../components/Toast';
 import {
+  IconApps,
   IconArrowUpRight,
   IconBattery,
+  IconBook,
   IconBrightnessDown,
   IconBrightnessUp,
   IconChevronDouble,
@@ -62,10 +64,12 @@ function fmtTime(totalSeconds: number): string {
 
 interface RemoteScreenProps {
   onOpenDevices: () => void;
+  onOpenReading: () => void;
+  onOpenApps: () => void;
   refreshToken: number;
 }
 
-export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps) {
+export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refreshToken }: RemoteScreenProps) {
   const insets = useSafeAreaInsets();
   const toast = useToast();
 
@@ -496,6 +500,8 @@ export function RemoteScreen({ onOpenDevices, refreshToken }: RemoteScreenProps)
         isPlaying={isPlaying}
         battery={status?.battery ?? null}
         onOpenDevices={onOpenDevices}
+        onOpenReading={onOpenReading}
+        onOpenApps={onOpenApps}
       />
 
       <View style={[styles.main, { paddingBottom: insets.bottom + 20 }]}>
@@ -674,6 +680,8 @@ function StatusStrip({
   isPlaying,
   battery,
   onOpenDevices,
+  onOpenReading,
+  onOpenApps,
 }: {
   online: boolean;
   deviceName: string;
@@ -681,6 +689,8 @@ function StatusStrip({
   isPlaying: boolean;
   battery: number | null;
   onOpenDevices: () => void;
+  onOpenReading: () => void;
+  onOpenApps: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const scrollX = useSharedValue(0);
@@ -720,6 +730,15 @@ function StatusStrip({
             Nothing playing
           </Text>
         )}
+      </View>
+
+      <View style={styles.stripNav}>
+        <PressableScale style={styles.stripNavBtn} onPress={onOpenReading} accessibilityLabel="Reading pad" hitSlop={6}>
+          <IconBook size={18} color={colors.off72} />
+        </PressableScale>
+        <PressableScale style={styles.stripNavBtn} onPress={onOpenApps} accessibilityLabel="App switcher" hitSlop={6}>
+          <IconApps size={18} color={colors.off72} />
+        </PressableScale>
       </View>
 
       {battery != null && (
@@ -992,6 +1011,17 @@ const styles = StyleSheet.create({
   marqueeIdle: { fontFamily: fonts.medium, fontSize: 12, color: colors.off38 },
   battery: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   batteryPct: { fontFamily: fonts.semiBold, fontSize: 12, color: colors.off55 },
+  // Reading + Apps quick-jumps sit right of the marquee. 30px circles keep
+  // the pair under ~70px so the marquee still has room to scroll at 360px.
+  stripNav: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stripNavBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.ink850,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   main: { flex: 1, paddingHorizontal: spacing.screenX, minHeight: 0 },
   inert: { opacity: 0.32 },

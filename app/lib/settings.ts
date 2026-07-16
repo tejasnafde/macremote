@@ -14,3 +14,19 @@ export async function getMediaNotificationEnabled(): Promise<boolean> {
 export async function setMediaNotificationEnabled(enabled: boolean): Promise<void> {
   await AsyncStorage.setItem(MEDIA_NOTIFICATION_KEY, enabled ? 'true' : 'false');
 }
+
+const READING_PAGE_MODE_KEY = 'macremote:readingPageMode';
+
+/** Which keys the reading pad's page turns send:
+ *  'arrows' -> prev=left, next=right; 'space' -> prev=pageup, next=space. */
+export type ReadingPageMode = 'arrows' | 'space';
+
+/** Reading pad page-turn key mode. Default 'arrows'. */
+export async function getReadingPageMode(): Promise<ReadingPageMode> {
+  const raw = await AsyncStorage.getItem(READING_PAGE_MODE_KEY);
+  return raw === 'space' ? 'space' : 'arrows';
+}
+
+export async function setReadingPageMode(mode: ReadingPageMode): Promise<void> {
+  await AsyncStorage.setItem(READING_PAGE_MODE_KEY, mode);
+}
