@@ -157,6 +157,21 @@ STATUS = (
 )
 
 
+# ── Generic input (reading mode: scroll + page-turn keys) ────────────────────
+# Drives whatever app is frontmost, so one surface covers browser manga/novels
+# and Readest. Scroll uses pixel units for smooth 1:1 finger tracking.
+def scroll_event(dx: int, dy: int) -> str:
+    return f'hs.eventtap.event.newScrollEvent({{{int(dx)}, {int(dy)}}}, {{}}, "pixel"):post()'
+
+
+# Keys allowed for page turns / navigation (allowlisted in the handler).
+KEY_STROKES = ("left", "right", "up", "down", "pageup", "pagedown", "space", "home", "end")
+
+
+def key_press(key: str) -> str:
+    return f'hs.eventtap.keyStroke({{}}, "{key}", 0)'
+
+
 # ── Focus an app by bundle id ────────────────────────────────────────────────
 # Raises the app to the foreground on whichever Space/display its window is on.
 # Used when the phone focuses a browser tab: the extension switches the tab, but
@@ -164,3 +179,18 @@ STATUS = (
 def focus_app(bundle_id: str) -> str:
     safe = bundle_id.replace('"', '')
     return f'hs.application.launchOrFocusByBundleID("{safe}")'
+
+
+# List running, visible (dock-worthy) apps as JSON [{name, bundle_id, active}].
+# Filters to regular apps with a bundle id, so background daemons and agents
+# (including macremote/Hammerspoon itself) do not clutter the switcher.
+LIST_APPS = (
+    "local out = {}; "
+    "for _, app in ipairs(hs.application.runningApplications()) do "
+    "  local bid = app:bundleID(); "
+    "  if bid and app:kind() == 1 then "
+    "    table.insert(out, {name = app:name(), bundle_id = bid, active = app:isFrontmost()}) "
+    "  end "
+    "end; "
+    "return hs.json.encode(out)"
+)
