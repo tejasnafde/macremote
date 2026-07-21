@@ -444,3 +444,35 @@ or `app.json` change, no new dependencies.
   terminated by the converter chip, nothing software-visible to sniff or
   spoof on the Mac side. Hardware bridge would be required, not worth it
   vs a USB-C to DP cable or gamma dimming.
+
+### v0.4 app UI (2026-07-21)
+- [x] `lib/api.ts`: `WindowEntry`/`DisplayWindows`/`WindowsResponse`,
+      `AudioApp`/`AudioAppsResponse`, `listWindows()`, `focusWindow(id)`
+      (typed `{ok, gone?}`), `listAudioApps()`, `setAppVolume(name, volume)`;
+      `BrowserTabAction` gained `'setvolume'`, `BrowserTab` optional
+      `volume`, `BrightnessResult` optional `via: 'ddc'|'gamma'`, `Display`
+      optional `gamma_level`.
+- [x] `components/HSlider.tsx`: shared compact horizontal 0-100 slider,
+      VolumeRail's throttled-send pattern (optimistic local value, ~10Hz
+      sends while dragging, commit on release, prop re-sync only when idle);
+      horizontal-pan-activates / vertical-fails so parent ScrollViews keep
+      scrolling.
+- [x] `screens/AppsScreen.tsx`: window-grouped switcher from GET /windows,
+      one section per display (monitor icon + display name header), rows =
+      app name bold + window title ellipsized + Active badge; tap focuses
+      that window, `{gone:true}` toasts "That window closed" and refreshes.
+      404 on /windows falls back to the old flat /apps list. Stacked "App
+      volume" section below the windows (no segmented toggle: one scroll
+      stays clearer at 360px): per-app HSlider rows with percent readout
+      when the Background Music driver is available, a single quiet hint
+      row when it is not, section hidden entirely when /audio/apps 404s.
+- [x] `screens/RemoteScreen.tsx`: BrowserTabRow gained a fourth 28px action
+      (volume icon) toggling an inline HSlider row under the tab, one open
+      at a time (keyed browser+tab_id), seeded from `tab.volume` else 100,
+      throttled `setvolume` tab commands. First gamma-fallback brightness
+      response of the session toasts "Dimming in software (DDC
+      unavailable)".
+- [x] `components/icons.tsx`: `IconMonitor`, `IconSliders` in the 1.6-stroke
+      house style.
+- [x] Acceptance: `npm run typecheck` green; `npx expo export --platform
+      android` clean.

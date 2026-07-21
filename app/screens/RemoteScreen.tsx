@@ -14,6 +14,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HSlider } from '../components/HSlider';
 import { PressableScale } from '../components/PressableScale';
 import { useToast } from '../components/Toast';
 import {
@@ -37,6 +38,7 @@ import {
   IconSeekBack10,
   IconSeekForward10,
   IconSleep,
+  IconVolume,
   IconWifiOff,
   IconX,
 } from '../components/icons';
@@ -96,6 +98,7 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   const [helpOpen, setHelpOpen] = useState(false);
   const helpAutoShownRef = useRef(false);
   const keysToastShownRef = useRef(false);
+  const gammaToastShownRef = useRef(false);
 
   const [updateInfo, setUpdateInfo] = useState<{ version: string; apkUrl: string } | null>(null);
   const [updatePhase, setUpdatePhase] = useState<'idle' | 'downloading'>('idle');
@@ -281,6 +284,18 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
     }
   }
 
+  function handleTabVolumeSend(tab: BrowserTab, v: number) {
+    // Throttled drag updates fail silently; the commit on release retries.
+    api.tabCommand(tab.tab_id, tab.browser, 'setvolume', Math.round(v)).catch(() => undefined);
+  }
+  async function handleTabVolumeCommit(tab: BrowserTab, v: number) {
+    try {
+      await api.tabCommand(tab.tab_id, tab.browser, 'setvolume', Math.round(v));
+    } catch (err) {
+      toast.show(errMessage(err));
+    }
+  }
+
   async function handleSetVolume(v: number) {
     try {
       await api.setVolume(Math.round(v));
@@ -344,7 +359,14 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
           }
           return;
         }
-        toast.show(direction === 'up' ? 'Brightness up' : 'Brightness down', 1100);
+        // First gamma fallback of the session: name the mechanism once so a
+        // backlight that visibly stays lit is not read as a broken control.
+        if (res?.via === 'gamma' && !gammaToastShownRef.current) {
+          gammaToastShownRef.current = true;
+          toast.show('Dimming in software (DDC unavailable)', 2400);
+        } else {
+          toast.show(direction === 'up' ? 'Brightness up' : 'Brightness down', 1100);
+        }
         if (brightHold.current) clearInterval(brightHold.current);
         brightRepeats.current = 0;
         brightHold.current = setInterval(() => {
@@ -528,6 +550,8 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
             tabs={status.browser_tabs}
             optimisticPlaying={optimisticTabPlaying}
             onCommand={handleTabCommand}
+            onVolumeSend={handleTabVolumeSend}
+            onVolumeCommit={handleTabVolumeCommit}
           />
         )}
 
@@ -814,34 +838,55 @@ function NowPlayingHero({
 /* --------------------------- browser tabs section --------------------------- */
 
 const BROWSER_ROW_HEIGHT = 42;
+const BROWSER_VOLUME_ROW_HEIGHT = 36;
 const BROWSER_MAX_ROWS = 3;
 
 function BrowserTabsSection({
   tabs,
   optimisticPlaying,
   onCommand,
+  onVolumeSend,
+  onVolumeCommit,
 }: {
   tabs: BrowserTab[];
   optimisticPlaying: Record<number, boolean>;
   onCommand: (tab: BrowserTab, action: BrowserTabAction) => void;
+  onVolumeSend: (tab: BrowserTab, v: number) => void;
+  onVolumeCommit: (tab: BrowserTab, v: number) => void;
 }) {
+  // One inline volume slider open at a time, keyed browser+tab_id so two
+  // browsers with colliding numeric tab ids can't both expand.
+  const [openVolumeKey, setOpenVolumeKey] = useState<string | null>(null);
+  const openVisible = tabs.some((t) => `${t.browser}-${t.tab_id}` === openVolumeKey);
+
   return (
     <View style={styles.browserSection}>
       <Text style={styles.browserHead}>Browser</Text>
       <ScrollView
-        style={tabs.length > BROWSER_MAX_ROWS ? { maxHeight: BROWSER_ROW_HEIGHT * BROWSER_MAX_ROWS } : undefined}
+        style={
+          tabs.length > BROWSER_MAX_ROWS
+            ? { maxHeight: BROWSER_ROW_HEIGHT * BROWSER_MAX_ROWS + (openVisible ? BROWSER_VOLUME_ROW_HEIGHT : 0) }
+            : undefined
+        }
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
       >
-        {tabs.map((tab, i) => (
-          <BrowserTabRow
-            key={`${tab.browser}-${tab.tab_id}`}
-            tab={tab}
-            playing={optimisticPlaying[tab.tab_id] ?? tab.playing}
-            last={i === tabs.length - 1}
-            onCommand={(action) => onCommand(tab, action)}
-          />
-        ))}
+        {tabs.map((tab, i) => {
+          const key = `${tab.browser}-${tab.tab_id}`;
+          return (
+            <BrowserTabRow
+              key={key}
+              tab={tab}
+              playing={optimisticPlaying[tab.tab_id] ?? tab.playing}
+              last={i === tabs.length - 1}
+              volumeOpen={openVolumeKey === key}
+              onToggleVolume={() => setOpenVolumeKey((prev) => (prev === key ? null : key))}
+              onCommand={(action) => onCommand(tab, action)}
+              onVolumeSend={(v) => onVolumeSend(tab, v)}
+              onVolumeCommit={(v) => onVolumeCommit(tab, v)}
+            />
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -851,36 +896,64 @@ function BrowserTabRow({
   tab,
   playing,
   last,
+  volumeOpen,
+  onToggleVolume,
   onCommand,
+  onVolumeSend,
+  onVolumeCommit,
 }: {
   tab: BrowserTab;
   playing: boolean;
   last: boolean;
+  volumeOpen: boolean;
+  onToggleVolume: () => void;
   onCommand: (action: BrowserTabAction) => void;
+  onVolumeSend: (v: number) => void;
+  onVolumeCommit: (v: number) => void;
 }) {
   return (
-    <View style={[styles.browserRow, !last && styles.browserRowDivider]}>
-      <View style={styles.browserBadge}>
-        <Text style={styles.browserBadgeText}>{tab.browser === 'firefox' ? 'F' : 'C'}</Text>
+    <View>
+      <View style={[styles.browserRow, !last && !volumeOpen && styles.browserRowDivider]}>
+        <View style={styles.browserBadge}>
+          <Text style={styles.browserBadgeText}>{tab.browser === 'firefox' ? 'F' : 'C'}</Text>
+        </View>
+        <Text style={styles.browserTitle} numberOfLines={1}>
+          {tab.title || 'Untitled tab'}
+        </Text>
+        <View style={styles.browserActions}>
+          <PressableScale
+            style={styles.browserBtn}
+            onPress={() => onCommand('playpause')}
+            accessibilityLabel={playing ? 'Pause tab' : 'Play tab'}
+          >
+            {playing ? <IconPause size={13} color={colors.off} /> : <IconPlay size={13} color={colors.off} />}
+          </PressableScale>
+          <PressableScale style={styles.browserBtn} onPress={() => onCommand('focus')} accessibilityLabel="Focus tab">
+            <IconArrowUpRight size={13} color={colors.off72} />
+          </PressableScale>
+          <PressableScale style={styles.browserBtn} onPress={() => onCommand('mute')} accessibilityLabel="Mute tab">
+            <IconMute size={13} color={colors.off72} />
+          </PressableScale>
+          <PressableScale
+            style={[styles.browserBtn, volumeOpen && styles.browserBtnOn]}
+            onPress={onToggleVolume}
+            accessibilityLabel="Tab volume"
+          >
+            <IconVolume size={13} color={volumeOpen ? colors.green : colors.off72} />
+          </PressableScale>
+        </View>
       </View>
-      <Text style={styles.browserTitle} numberOfLines={1}>
-        {tab.title || 'Untitled tab'}
-      </Text>
-      <View style={styles.browserActions}>
-        <PressableScale
-          style={styles.browserBtn}
-          onPress={() => onCommand('playpause')}
-          accessibilityLabel={playing ? 'Pause tab' : 'Play tab'}
-        >
-          {playing ? <IconPause size={13} color={colors.off} /> : <IconPlay size={13} color={colors.off} />}
-        </PressableScale>
-        <PressableScale style={styles.browserBtn} onPress={() => onCommand('focus')} accessibilityLabel="Focus tab">
-          <IconArrowUpRight size={13} color={colors.off72} />
-        </PressableScale>
-        <PressableScale style={styles.browserBtn} onPress={() => onCommand('mute')} accessibilityLabel="Mute tab">
-          <IconMute size={13} color={colors.off72} />
-        </PressableScale>
-      </View>
+      {volumeOpen && (
+        <View style={[styles.browserVolumeRow, !last && styles.browserRowDivider]}>
+          <HSlider
+            value={tab.volume ?? 100}
+            onSend={onVolumeSend}
+            onCommit={onVolumeCommit}
+            showValue
+            accessibilityLabel="Tab volume slider"
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -1148,6 +1221,8 @@ const styles = StyleSheet.create({
   },
   browserBadgeText: { fontFamily: fonts.extraBold, fontSize: 10.5, color: colors.off72 },
   browserTitle: { flex: 1, minWidth: 0, fontFamily: fonts.medium, fontSize: 12.5, color: colors.off },
+  // Four 28px buttons + 6px gaps = 130px; with the 22px badge and gaps the
+  // title still keeps ~68px at 360px width, enough for an ellipsized name.
   browserActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   browserBtn: {
     width: 28,
@@ -1156,6 +1231,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink700,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  browserBtnOn: { backgroundColor: colors.green14 },
+  // Inline expandable volume: indented past the badge column so the slider
+  // reads as belonging to the row above it.
+  browserVolumeRow: {
+    height: BROWSER_VOLUME_ROW_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 32,
+    paddingBottom: 6,
   },
 
   thumbZone: { marginTop: 'auto', alignItems: 'center', paddingRight: 56 },
