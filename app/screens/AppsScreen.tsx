@@ -1,37 +1,84 @@
-// App switcher: lists the Mac's running apps (frontmost first) from GET /apps
-// and raises one via POST /apps/focus. Row/list styling mirrors DevicesScreen
-// so the two "list" screens read as one family; loading / empty / offline
-// states match its language too. Pull-to-refresh plus a header refresh button.
+// Window switcher + per-app audio, stacked on one screen. GET /windows
+// groups windows per display (section header per monitor); tapping a row
+// raises that specific window via POST /windows/{id}/focus. Servers older
+// than v0.4 404 on /windows, so the screen falls back to the flat GET /apps
+// list and behaves exactly like the pre-v0.4 switcher. Below the windows, a
+// "App volume" section lists Background Music per-app volumes with compact
+// throttled sliders; when the driver is missing it degrades to one quiet
+// hint row, and when /audio/apps does not exist at all the section hides.
+// Row/list styling mirrors DevicesScreen so the "list" screens read as one
+// family; loading / empty / offline states match its language too.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HSlider } from '../components/HSlider';
 import { PressableScale } from '../components/PressableScale';
-import { IconArrowLeft, IconRefresh, IconWifiOff } from '../components/icons';
+import { IconArrowLeft, IconMonitor, IconRefresh, IconSliders, IconWifiOff } from '../components/icons';
 import { useToast } from '../components/Toast';
-import { AppEntry, api, ApiError } from '../lib/api';
+import { AppEntry, AudioApp, DisplayWindows, WindowEntry, api, ApiError } from '../lib/api';
 import { colors, fonts, radii, spacing } from '../theme';
 
 type LoadState = 'loading' | 'ready' | 'offline';
 
+type SwitcherData =
+  | { kind: 'windows'; displays: DisplayWindows[] }
+  | { kind: 'apps'; apps: AppEntry[] };
+
+type AudioState =
+  | { kind: 'hidden' } // endpoint missing or errored: pretend the feature does not exist
+  | { kind: 'unavailable' } // server reachable but Background Music driver not installed
+  | { kind: 'ready'; apps: AudioApp[] };
+
 export function AppsScreen({ onClose }: { onClose: () => void }) {
   const insets = useSafeAreaInsets();
   const toast = useToast();
-  const [apps, setApps] = useState<AppEntry[]>([]);
+  const [data, setData] = useState<SwitcherData>({ kind: 'windows', displays: [] });
+  const [audio, setAudio] = useState<AudioState>({ kind: 'hidden' });
   const [state, setState] = useState<LoadState>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const switchingRef = useRef(false);
 
-  const load = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
-    if (mode === 'initial') setState('loading');
+  const loadWindows = useCallback(async () => {
     try {
-      const res = await api.listApps();
-      setApps(res.apps);
+      const res = await api.listWindows();
+      setData({ kind: 'windows', displays: res.displays });
       setState('ready');
-    } catch {
-      if (mode === 'initial') setState('offline');
-      else toast.show('Could not refresh apps', 1600);
+    } catch (err) {
+      // Older server without /windows: keep the screen useful with the flat
+      // app list. Anything else is a real connectivity problem.
+      if (err instanceof ApiError && err.status === 404) {
+        const res = await api.listApps();
+        setData({ kind: 'apps', apps: res.apps });
+        setState('ready');
+        return;
+      }
+      throw err;
     }
-  }, [toast]);
+  }, []);
+
+  const loadAudio = useCallback(async () => {
+    // Audio problems never flip the screen offline; the windows list is the
+    // primary feature and per-app volume just hides when it cannot load.
+    try {
+      const res = await api.listAudioApps();
+      setAudio(res.available ? { kind: 'ready', apps: res.apps } : { kind: 'unavailable' });
+    } catch {
+      setAudio({ kind: 'hidden' });
+    }
+  }, []);
+
+  const load = useCallback(
+    async (mode: 'initial' | 'refresh' = 'initial') => {
+      if (mode === 'initial') setState('loading');
+      try {
+        await Promise.all([loadWindows(), loadAudio()]);
+      } catch {
+        if (mode === 'initial') setState('offline');
+        else toast.show('Could not refresh windows', 1600);
+      }
+    },
+    [loadAudio, loadWindows, toast]
+  );
 
   useEffect(() => {
     load('initial');
@@ -43,14 +90,37 @@ export function AppsScreen({ onClose }: { onClose: () => void }) {
     setRefreshing(false);
   }, [load]);
 
-  async function handleFocus(app: AppEntry) {
+  async function handleFocusWindow(win: WindowEntry) {
+    if (switchingRef.current || win.active) return;
+    switchingRef.current = true;
+    try {
+      const res = await api.focusWindow(win.id);
+      if (res.gone) {
+        switchingRef.current = false;
+        toast.show('That window closed', 1800);
+        load('refresh');
+        return;
+      }
+      toast.show(`Focused ${win.app}`, 1600);
+      // Give the Mac a beat to raise the window, then re-pull so the active
+      // badge lands on the newly focused window.
+      setTimeout(() => {
+        load('refresh').finally(() => {
+          switchingRef.current = false;
+        });
+      }, 500);
+    } catch (err) {
+      switchingRef.current = false;
+      toast.show(err instanceof ApiError ? err.message : 'Could not focus that window', 2000);
+    }
+  }
+
+  async function handleFocusApp(app: AppEntry) {
     if (switchingRef.current || app.active) return;
     switchingRef.current = true;
     try {
       await api.focusApp(app.bundle_id);
       toast.show(`Switched to ${app.name}`, 1600);
-      // Give the Mac a beat to raise the window, then re-pull so the active
-      // dot lands on the new frontmost app.
       setTimeout(() => {
         load('refresh').finally(() => {
           switchingRef.current = false;
@@ -61,6 +131,30 @@ export function AppsScreen({ onClose }: { onClose: () => void }) {
       toast.show(err instanceof ApiError ? err.message : 'Could not switch apps', 2000);
     }
   }
+
+  function sendAppVolume(name: string, v: number) {
+    // Throttled drag updates fail silently; the commit on release surfaces
+    // anything that matters.
+    api.setAppVolume(name, v).catch(() => undefined);
+  }
+
+  async function commitAppVolume(name: string, v: number) {
+    try {
+      const res = await api.setAppVolume(name, v);
+      if (!res.ok && res.available === false) {
+        // Driver vanished between listing and setting (uninstalled or
+        // stopped): degrade to the same quiet hint the probe would show.
+        setAudio({ kind: 'unavailable' });
+      }
+    } catch (err) {
+      toast.show(err instanceof ApiError ? err.message : 'Could not set app volume', 2000);
+    }
+  }
+
+  const windowsEmpty =
+    data.kind === 'windows'
+      ? data.displays.every((d) => d.windows.length === 0)
+      : data.apps.length === 0;
 
   return (
     <ScrollView
@@ -79,9 +173,9 @@ export function AppsScreen({ onClose }: { onClose: () => void }) {
         </PressableScale>
         <View style={styles.headTexts}>
           <Text style={styles.head}>Apps</Text>
-          <Text style={styles.sub}>Switch the app in focus on your Mac.</Text>
+          <Text style={styles.sub}>Focus a window, balance app audio.</Text>
         </View>
-        <PressableScale style={styles.iconBtn} onPress={() => load('refresh')} accessibilityLabel="Refresh apps">
+        <PressableScale style={styles.iconBtn} onPress={() => load('refresh')} accessibilityLabel="Refresh windows">
           <IconRefresh size={18} color={colors.off72} />
         </PressableScale>
       </View>
@@ -106,19 +200,57 @@ export function AppsScreen({ onClose }: { onClose: () => void }) {
         </View>
       )}
 
-      {state === 'ready' && apps.length === 0 && (
+      {state === 'ready' && windowsEmpty && (
         <View style={styles.centerState}>
-          <Text style={styles.emptyTitle}>No apps reported</Text>
-          <Text style={styles.offlineBody}>Nothing is running that the Mac can raise right now.</Text>
+          <Text style={styles.emptyTitle}>No windows reported</Text>
+          <Text style={styles.offlineBody}>Nothing is open that the Mac can raise right now.</Text>
         </View>
       )}
 
       {state === 'ready' &&
-        apps.map((app) => (
+        data.kind === 'windows' &&
+        data.displays.map((display) => (
+          <View key={display.id}>
+            {display.windows.length > 0 && (
+              <View style={styles.sectionHead}>
+                <IconMonitor size={14} color={colors.off38} />
+                <Text style={styles.sectionHeadText} numberOfLines={1}>
+                  {display.name}
+                </Text>
+              </View>
+            )}
+            {display.windows.map((win) => (
+              <PressableScale
+                key={win.id}
+                style={[styles.row, win.active && styles.rowActive]}
+                onPress={() => handleFocusWindow(win)}
+              >
+                <View style={[styles.dot, win.active && styles.dotActive]} />
+                <View style={styles.info}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {win.app}
+                  </Text>
+                  <Text style={styles.glance} numberOfLines={1}>
+                    {win.title || 'Untitled window'}
+                  </Text>
+                </View>
+                {win.active && (
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText}>Active</Text>
+                  </View>
+                )}
+              </PressableScale>
+            ))}
+          </View>
+        ))}
+
+      {state === 'ready' &&
+        data.kind === 'apps' &&
+        data.apps.map((app) => (
           <PressableScale
             key={app.bundle_id}
             style={[styles.row, app.active && styles.rowActive]}
-            onPress={() => handleFocus(app)}
+            onPress={() => handleFocusApp(app)}
           >
             <View style={[styles.dot, app.active && styles.dotActive]} />
             <View style={styles.info}>
@@ -136,6 +268,41 @@ export function AppsScreen({ onClose }: { onClose: () => void }) {
             )}
           </PressableScale>
         ))}
+
+      {state === 'ready' && audio.kind !== 'hidden' && (
+        <View>
+          <View style={styles.sectionHead}>
+            <IconSliders size={14} color={colors.off38} />
+            <Text style={styles.sectionHeadText}>App volume</Text>
+          </View>
+          {audio.kind === 'unavailable' ? (
+            <View style={styles.hintRow}>
+              <Text style={styles.hintText}>
+                Per-app volume needs the Background Music driver on the Mac
+              </Text>
+            </View>
+          ) : audio.apps.length === 0 ? (
+            <View style={styles.hintRow}>
+              <Text style={styles.hintText}>No apps are playing audio right now</Text>
+            </View>
+          ) : (
+            audio.apps.map((app) => (
+              <View key={app.name} style={styles.audioRow}>
+                <Text style={styles.audioName} numberOfLines={1}>
+                  {app.name}
+                </Text>
+                <HSlider
+                  value={app.volume}
+                  onSend={(v) => sendAppVolume(app.name, v)}
+                  onCommit={(v) => commitAppVolume(app.name, v)}
+                  showValue
+                  accessibilityLabel={`${app.name} volume`}
+                />
+              </View>
+            ))
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -155,6 +322,24 @@ const styles = StyleSheet.create({
   },
   head: { fontFamily: fonts.display, fontSize: 24, color: colors.off },
   sub: { fontFamily: fonts.body, fontSize: 13, color: colors.off55, marginTop: 6 },
+
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 8,
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  sectionHeadText: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.off38,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
 
   row: {
     flexDirection: 'row',
@@ -186,6 +371,34 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
+
+  // Per-app audio rows: fixed-width name column keeps every slider's start
+  // aligned; at 360px the content column is ~320px, so 96 name + slider +
+  // 38 readout leaves the track roughly 140px wide, comfortably draggable.
+  audioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.ink850,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  audioName: { width: 96, fontFamily: fonts.semiBold, fontSize: 13.5, color: colors.off },
+  // Deliberately quiet (no error colors): the driver being absent is a
+  // setup fact, not a failure.
+  hintRow: {
+    backgroundColor: colors.ink850,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    padding: 16,
+    marginBottom: 10,
+  },
+  hintText: { fontFamily: fonts.body, fontSize: 12.5, color: colors.off55, lineHeight: 18 },
 
   centerState: { alignItems: 'center', paddingTop: 60, gap: 8 },
   offlineIcon: {
