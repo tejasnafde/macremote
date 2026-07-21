@@ -373,6 +373,34 @@ export function IconApps({ size = 20, color = '#f3f5f1' }: IconProps) {
   );
 }
 
+export function IconMonitor({ size = 16, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={3} y={4.5} width={18} height={12.5} rx={2.2} stroke={color} strokeWidth={1.6} strokeLinejoin="round" />
+      <Path d="M12 17v3.5" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+      <Path d="M8.2 20.5h7.6" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+// Vertical mixer: three fader lines with a knob at a different height on
+// each, matching the 1.6 stroke weight of the rest of the set.
+export function IconSliders({ size = 16, color = '#f3f5f1' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 4.5v4.2M6 12.3v7.2M12 4.5v8.7M12 16.8v2.7M18 4.5v1.7M18 9.8v9.7"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+      />
+      <Circle cx={6} cy={10.5} r={1.8} stroke={color} strokeWidth={1.6} />
+      <Circle cx={12} cy={15} r={1.8} stroke={color} strokeWidth={1.6} />
+      <Circle cx={18} cy={8} r={1.8} stroke={color} strokeWidth={1.6} />
+    </Svg>
+  );
+}
+
 export function IconArrowLeft({ size = 20, color = '#f3f5f1' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
