@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Dial - Arc - macremote</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Archivo+Black&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0B0E12;
+    --panel:#12161c;
+    --panel-2:#171c23;
+    --line:rgba(245,244,239,.09);
+    --line-strong:rgba(245,244,239,.16);
+    --off:#F5F4EF;
+    --dim:rgba(245,244,239,.56);
+    --faint:rgba(245,244,239,.32);
+    --green:#4ADE80;
+    --green-dim:rgba(74,222,128,.32);
+    --ease:cubic-bezier(.16,1,.3,1);
+    --spring:cubic-bezier(.34,1.56,.64,1);
+  }
+  *,*::before,*::after{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; margin:0; }
+  body{
+    background:var(--ink);
+    color:var(--off);
+    font-family:"Familjen Grotesk",ui-sans-serif,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+    position:fixed; inset:0; width:100%; height:100dvh;
+    user-select:none; -webkit-user-select:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .tabular{ font-variant-numeric:tabular-nums; }
+
+  .phone{
+    position:relative;
+    width:100%; max-width:430px; height:100%; max-height:100dvh;
+    display:flex; flex-direction:column;
+    background:
+      radial-gradient(120% 70% at 50% -10%, rgba(74,222,128,.05), transparent 55%),
+      var(--ink);
+    touch-action:none;
+  }
+
+  .statusbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:max(14px, env(safe-area-inset-top)) 20px 10px;
+    font-size:11px; font-weight:600; letter-spacing:.02em;
+    color:var(--faint);
+    border-bottom:1px solid var(--line);
+    flex:none;
+  }
+  .sb-dot{ display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--green); box-shadow:0 0 6px rgba(74,222,128,.7); margin-right:6px; }
+  .sb-right{ display:flex; align-items:center; }
+
+  .head{ text-align:center; padding:16px 0 2px; flex:none; }
+  .head-label{ font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); }
+
+  /* ---- segmented screen selector ---- */
+  .segwrap{ display:flex; justify-content:center; padding:14px 20px 4px; flex:none; }
+  .seg{
+    position:relative;
+    display:flex; width:100%; max-width:340px;
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:999px; padding:4px;
+  }
+  .seg-thumb{
+    position:absolute; top:4px; left:4px; height:calc(100% - 8px);
+    width:calc((100% - 8px) / 3);
+    background:var(--green-dim);
+    border:1px solid var(--green-dim);
+    border-radius:999px;
+    transition:transform .38s var(--spring);
+  }
+  .seg button{
+    position:relative; z-index:1; flex:1; border:none; background:transparent;
+    color:var(--dim); font:600 12.5px "Familjen Grotesk",sans-serif;
+    padding:9px 4px; border-radius:999px; cursor:pointer;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    transition:color .2s var(--ease);
+  }
+  .seg button.active{ color:var(--off); font-weight:700; }
+
+  .stage{
+    position:relative;
+    flex:1; min-height:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  .gauge-wrap{ position:relative; width:min(74vw,300px); aspect-ratio:1/1; }
+  .gauge-svg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+  .track{ fill:none; stroke:rgba(245,244,239,.08); stroke-width:14; stroke-linecap:round; }
+  .fill{ fill:none; stroke:var(--green); stroke-width:14; stroke-linecap:round; filter:drop-shadow(0 0 9px rgba(74,222,128,.5)); }
+  .tick{ stroke:rgba(245,244,239,.15); stroke-width:2; stroke-linecap:round; transform-box:fill-box; transform-origin:center; }
+  .tick.major{ stroke:rgba(245,244,239,.26); }
+  .tick.active{ stroke:var(--green); }
+
+  .head-knob{
+    position:absolute; width:30px; height:30px; border-radius:50%;
+    left:0; top:0; transform:translate(-50%,-50%);
+    background:radial-gradient(circle at 35% 30%, #f7fff9, var(--off) 60%);
+    box-shadow:0 4px 14px -4px rgba(0,0,0,.6), 0 0 0 5px rgba(74,222,128,.22), 0 0 16px rgba(74,222,128,.5);
+    cursor:grab; touch-action:none;
+    transition:box-shadow .15s var(--ease);
+  }
+  .head-knob:active{ cursor:grabbing; box-shadow:0 4px 14px -4px rgba(0,0,0,.6), 0 0 0 8px rgba(74,222,128,.3), 0 0 20px rgba(74,222,128,.6); }
+  .head-knob::after{ content:""; position:absolute; inset:9px; border-radius:50%; background:var(--green); }
+
+  .center-readout{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-14%);
+    text-align:center; pointer-events:none;
+  }
+  .pct{ font-family:"Archivo Black",sans-serif; font-size:clamp(34px,11vw,46px); line-height:1; color:var(--off); }
+  .pct-sign{ font-size:.48em; margin-left:1px; color:var(--dim); }
+  .active-name{ font-size:13px; font-weight:700; color:var(--off); margin-top:4px; }
+  .dim-note{ display:flex; align-items:center; justify-content:center; gap:5px; font-size:10.5px; font-weight:600; color:var(--faint); margin-top:4px; letter-spacing:.02em; }
+  .dim-note::before{ content:""; width:5px; height:5px; border-radius:50%; background:var(--faint); }
+  .dim-note.hw{ color:rgba(74,222,128,.85); }
+  .dim-note.hw::before{ background:var(--green); box-shadow:0 0 5px rgba(74,222,128,.6); }
+
+  .foot{
+    flex:none; text-align:center;
+    padding:10px 16px calc(16px + env(safe-area-inset-bottom));
+    font-size:10.5px; color:var(--faint); border-top:1px solid var(--line);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition-duration:80ms !important; animation-duration:.001ms !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="statusbar">
+      <span>macremote</span>
+      <span class="sb-right"><span class="sb-dot"></span>Tejas's iMac</span>
+    </div>
+
+    <div class="head"><span class="head-label">Brightness</span></div>
+
+    <div class="segwrap">
+      <div class="seg" id="seg">
+        <div class="seg-thumb" id="segThumb"></div>
+        <button data-i="0" class="active">Built-in</button>
+        <button data-i="1">BenQ</button>
+        <button data-i="2">LG</button>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="gauge-wrap" id="gaugeWrap">
+        <svg class="gauge-svg" viewBox="0 0 300 300" aria-hidden="true">
+          <path class="track" id="track" d=""></path>
+          <path class="fill" id="fill" d=""></path>
+          <g id="ticks"></g>
+        </svg>
+        <div class="head-knob" id="headKnob" role="slider" aria-label="Brightness head" aria-valuemin="0" aria-valuemax="100"></div>
+        <div class="center-readout">
+          <div class="pct tabular" id="pct">70<span class="pct-sign">%</span></div>
+          <div class="active-name" id="activeName">Built-in</div>
+          <div class="dim-note hw" id="dimNote">Hardware</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">Drag the head to set brightness</div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  var CX = 150, CY = 150;
+  var SWEEP_START = 235;   // compass degrees, 0 = top, clockwise
+  var SWEEP_TOTAL = 250;   // wide bottom gap so it reads as an arc, not a ring
+  var TRACK_R = 122;
+  var TICK_COUNT = 26;
+  var TICK_R_IN = 100, TICK_R_OUT_MIN = 110, TICK_R_OUT_MAJ = 116;
+
+  function polarToXY(r, deg){
+    var rad = deg * Math.PI / 180;
+    return [ CX + r * Math.sin(rad), CY - r * Math.cos(rad) ];
+  }
+  function arcPath(r, startDeg, sweepDeg){
+    if (sweepDeg <= 0.0001) return "";
+    sweepDeg = Math.min(sweepDeg, 359.9);
+    var p1 = polarToXY(r, startDeg);
+    var p2 = polarToXY(r, startDeg + sweepDeg);
+    var large = sweepDeg > 180 ? 1 : 0;
+    return "M " + p1[0].toFixed(2) + " " + p1[1].toFixed(2) +
+      " A " + r + " " + r + " 0 " + large + " 1 " + p2[0].toFixed(2) + " " + p2[1].toFixed(2);
+  }
+  function valueToDeg(v){ return SWEEP_START + (v / 100) * SWEEP_TOTAL; }
+
+  var $ = function(id){ return document.getElementById(id); };
+  var gaugeWrap = $("gaugeWrap");
+  var track = $("track"), fill = $("fill"), ticksG = $("ticks");
+  var headKnob = $("headKnob");
+  var pctEl = $("pct"), activeNameEl = $("activeName"), dimNoteEl = $("dimNote");
+  var seg = $("seg"), segThumb = $("segThumb");
+
+  track.setAttribute("d", arcPath(TRACK_R, SWEEP_START, SWEEP_TOTAL));
+
+  var ticks = [];
+  (function buildTicks(){
+    for (var i = 0; i < TICK_COUNT; i++){
+      var swept = i * (SWEEP_TOTAL / (TICK_COUNT - 1));
+      var deg = (SWEEP_START + swept) % 360;
+      var major = i % 5 === 0;
+      var rOut = major ? TICK_R_OUT_MAJ : TICK_R_OUT_MIN;
+      var p1 = polarToXY(TICK_R_IN, deg);
+      var p2 = polarToXY(rOut, deg);
+      var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", p1[0]); line.setAttribute("y1", p1[1]);
+      line.setAttribute("x2", p2[0]); line.setAttribute("y2", p2[1]);
+      line.setAttribute("class", "tick" + (major ? " major" : ""));
+      ticksG.appendChild(line);
+      ticks.push(line);
+    }
+  })();
+
+  var displays = [
+    { id:"builtin", name:"Built-in", brightness:70, method:"hardware" },
+    { id:"benq", name:"BenQ EX2710S", brightness:45, method:"software" },
+    { id:"lg", name:"LG UltraGear", brightness:100, method:"software" }
+  ];
+  var activeIndex = 0;
+  var curValue = 70;
+
+  function positionKnob(deg){
+    var pt = polarToXY(TRACK_R, deg);
+    var pct = (100 * pt[0] / 300) + "%";
+    var pcy = (100 * pt[1] / 300) + "%";
+    headKnob.style.left = pct;
+    headKnob.style.top = pcy;
+  }
+
+  function renderValue(v, opts){
+    opts = opts || {};
+    v = Math.max(0, Math.min(100, v));
+    curValue = v;
+    var sweep = v / 100 * SWEEP_TOTAL;
+    fill.setAttribute("d", arcPath(TRACK_R, SWEEP_START, sweep));
+    positionKnob(valueToDeg(v));
+    pctEl.childNodes[0].nodeValue = Math.round(v);
+
+    var idx = Math.round(v / 100 * (TICK_COUNT - 1));
+    for (var i = 0; i < ticks.length; i++){
+      ticks[i].classList.toggle("active", i <= idx && v > 0);
+    }
+    headKnob.setAttribute("aria-valuenow", Math.round(v));
+    if (!opts.quiet && navigator.vibrate) navigator.vibrate(2);
+  }
+
+  function setActiveDisplay(index, opts){
+    opts = opts || {};
+    activeIndex = index;
+    var d = displays[index];
+    activeNameEl.textContent = d.name;
+    dimNoteEl.textContent = d.method === "hardware" ? "Hardware" : "Software dimmed";
+    dimNoteEl.classList.toggle("hw", d.method === "hardware");
+    headKnob.setAttribute("aria-label", "Brightness head for " + d.name);
+
+    seg.querySelectorAll("button").forEach(function(b, i){ b.classList.toggle("active", i === index); });
+    segThumb.style.transform = "translateX(" + (index * 100) + "%)";
+
+    if (opts.animate) tweenTo(d.brightness);
+    else renderValue(d.brightness, { quiet:true });
+  }
+
+  function tweenTo(target){
+    var from = curValue;
+    var dur = 560;
+    var t0 = performance.now();
+    function step(now){
+      var p = Math.min(1, (now - t0) / dur);
+      var eased = 1 - Math.pow(1 - p, 3);
+      renderValue(from + (target - from) * eased, { quiet: p < 1 });
+      if (p < 1) requestAnimationFrame(step);
+      else displays[activeIndex].brightness = target;
+    }
+    requestAnimationFrame(step);
+  }
+
+  /* ---- segmented control ---- */
+  seg.querySelectorAll("button").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var i = parseInt(btn.dataset.i, 10);
+      if (i === activeIndex) return;
+      setActiveDisplay(i, { animate:true });
+    });
+  });
+
+  /* ---- linear drag on the head (not angular) ---- */
+  var dragging = false;
+  var dragStartY = 0, dragStartX = 0, dragStartValue = 0;
+  var SENSITIVITY = 0.42; // percent per pixel of vertical travel
+
+  headKnob.addEventListener("pointerdown", function(e){
+    dragging = true;
+    dragStartY = e.clientY;
+    dragStartX = e.clientX;
+    dragStartValue = curValue;
+    headKnob.setPointerCapture(e.pointerId);
+  });
+  headKnob.addEventListener("pointermove", function(e){
+    if (!dragging) return;
+    // Linear drag: vertical + horizontal travel both nudge the value, no
+    // angle math here (the round mockups use atan2, this one is a straight
+    // pixel-distance slider, like dragging a real fader).
+    var dy = dragStartY - e.clientY;
+    var dx = e.clientX - dragStartX;
+    var delta = (dy * 0.75 + dx * 0.25) * SENSITIVITY;
+    var v = dragStartValue + delta;
+    renderValue(v);
+    displays[activeIndex].brightness = Math.round(Math.max(0, Math.min(100, v)));
+  });
+  function endDrag(){ dragging = false; }
+  headKnob.addEventListener("pointerup", endDrag);
+  headKnob.addEventListener("pointercancel", endDrag);
+
+  renderValue(curValue, { quiet:true });
+  setActiveDisplay(activeIndex, { animate:false });
+})();
+</script>
+</body>
+</html>

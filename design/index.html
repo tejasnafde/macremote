@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>macremote — feedback</title>
+<title>macremote - brightness dial</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet"/>
 <style>
   :root{ --ink:#0d1117; --panel:#141a22; --line:#232c37; --text:#e9edf2; --dim:#8b97a5; --green:#4ade80; --amber:#fbbf24; }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
@@ -15,19 +15,52 @@
   h1{font-family:Fraunces,serif; font-size:clamp(28px,8vw,38px); margin:0 0 6px}
   h1 em{color:var(--green); font-style:normal}
   .sub{color:var(--dim); margin:0 0 26px; font-size:15px}
-  label{display:block; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0 0 8px}
-  select,textarea{width:100%; background:var(--panel); color:var(--text); border:1px solid var(--line);
+
+  .cards{display:flex; flex-direction:column; gap:14px; margin-bottom:22px}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:16px; display:flex; gap:12px; align-items:flex-start;
+    transition:border-color .15s, background .15s;
+  }
+  .card.selected{ border-color:var(--green); background:#141f18; }
+  .card input[type="radio"]{
+    appearance:none; -webkit-appearance:none; width:20px; height:20px; flex:none; margin-top:2px;
+    border:2px solid var(--line); border-radius:50%; background:transparent; cursor:pointer;
+    position:relative; transition:border-color .15s;
+  }
+  .card input[type="radio"]:checked{ border-color:var(--green); }
+  .card input[type="radio"]:checked::after{
+    content:""; position:absolute; inset:3px; border-radius:50%; background:var(--green);
+  }
+  .card-body{flex:1; min-width:0}
+  .card-top{display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap}
+  .card-name{font-size:16.5px; font-weight:700; margin:0}
+  .card-open{
+    font-size:13px; font-weight:700; color:var(--green); text-decoration:none;
+    white-space:nowrap; padding:4px 2px;
+  }
+  .card-open:active{ opacity:.7; }
+  .card-blurb{color:var(--dim); font-size:13.5px; line-height:1.5; margin:5px 0 0}
+  .card label.hit{ display:flex; gap:12px; align-items:flex-start; width:100%; cursor:pointer; }
+
+  label.field-label{display:block; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0 0 8px}
+  textarea{width:100%; background:var(--panel); color:var(--text); border:1px solid var(--line);
     border-radius:14px; padding:14px; font:15px/1.5 "Familjen Grotesk",sans-serif; margin-bottom:18px}
-  textarea{min-height:150px; resize:vertical}
-  select:focus,textarea:focus{outline:none; border-color:var(--green)}
-  .btn{display:block; width:100%; padding:16px; border-radius:14px; border:0; background:var(--green); color:#08130b;
-    font:700 17px "Familjen Grotesk",sans-serif; cursor:pointer; transition:transform .12s, opacity .2s}
+  textarea{min-height:120px; resize:vertical}
+  textarea:focus{outline:none; border-color:var(--green)}
+
+  .actions{display:flex; gap:10px}
+  .btn{flex:1; display:block; padding:16px; border-radius:14px; border:0; cursor:pointer;
+    font:700 15.5px "Familjen Grotesk",sans-serif; transition:transform .12s, opacity .2s}
   .btn:active{transform:scale(.97)}
   .btn[disabled]{opacity:.45; pointer-events:none}
+  .btn-send{background:var(--panel); color:var(--text); border:1px solid var(--line) !important;}
+  .btn-proceed{background:var(--green); color:#08130b;}
+
   .err{color:var(--amber); font-size:14px; text-align:center; margin-top:12px; display:none}
   .note{color:var(--dim); font-size:13px; text-align:center; margin-top:16px; line-height:1.5}
   .done{display:none; text-align:center; padding:72px 12px}
-  .done .big{font-size:52px}
+  .done .big{font-size:52px; color:var(--green);}
   .done h3{font-family:Fraunces,serif; font-size:24px; margin:14px 0 6px}
   .done p{color:var(--dim)}
 </style>
@@ -35,49 +68,121 @@
 <body>
 <div class="wrap" id="main">
   <h1>mac<em>remote</em></h1>
-  <p class="sub">Direct line to the build. Bugs, ideas, requests, half-thoughts. It reaches me within a minute and I reply on Discord.</p>
+  <p class="sub">Three directions for the new brightness dial. Open each on your phone, pick your favorite, and tell me why.</p>
 
-  <label for="kind">Type</label>
-  <select id="kind">
-    <option value="bug">Bug</option>
-    <option value="idea">Idea or feature request</option>
-    <option value="question">Question</option>
-    <option value="other">Other</option>
-  </select>
+  <div class="cards" id="cards">
+    <div class="card" data-id="radial">
+      <label class="hit">
+        <input type="radio" name="dial" value="radial">
+        <span class="card-body">
+          <span class="card-top">
+            <span class="card-name">Radial</span>
+            <a class="card-open" href="mockups/dial-radial.html" target="_blank" rel="noopener">Open &rsaquo;</a>
+          </span>
+          <span class="card-blurb">One big rotary dial. Drag the ring to set brightness, tap the center to bloom a ring of screen chips and pick which display it targets.</span>
+        </span>
+      </label>
+    </div>
 
-  <label for="msg">Message</label>
-  <textarea id="msg" placeholder="What is on your mind? For a bug, what you did and what happened. For an idea, what you want to be able to do."></textarea>
+    <div class="card" data-id="arc">
+      <label class="hit">
+        <input type="radio" name="dial" value="arc">
+        <span class="card-body">
+          <span class="card-top">
+            <span class="card-name">Arc</span>
+            <a class="card-open" href="mockups/dial-arc.html" target="_blank" rel="noopener">Open &rsaquo;</a>
+          </span>
+          <span class="card-blurb">A wide instrument-style arc gauge. Drag the head to set the level, a slim segmented switch above retargets the dial with a smooth sweep.</span>
+        </span>
+      </label>
+    </div>
 
-  <button class="btn" id="send">Send</button>
+    <div class="card" data-id="stack">
+      <label class="hit">
+        <input type="radio" name="dial" value="stack">
+        <span class="card-body">
+          <span class="card-top">
+            <span class="card-name">Stack</span>
+            <a class="card-open" href="mockups/dial-stack.html" target="_blank" rel="noopener">Open &rsaquo;</a>
+          </span>
+          <span class="card-blurb">No selection step. Every display gets its own compact dial in a list, each independently draggable, all visible at a glance.</span>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <label class="field-label" for="msg">Comments</label>
+  <textarea id="msg" placeholder="What you liked, what felt off, anything you'd change."></textarea>
+
+  <div class="actions">
+    <button class="btn btn-send" id="send">Send</button>
+    <button class="btn btn-proceed" id="proceed">Proceed</button>
+  </div>
   <p class="err" id="err">Could not send, try again?</p>
-  <p class="note">Replies land in your Discord. When there is a new UI to review, this page becomes a design preview again.</p>
+  <p class="note">Pick a favorite (or don't) and send a comment any time. Proceed tells me you're ready to move forward with the selected one.</p>
 </div>
 
 <div class="done wrap" id="done">
-  <div class="big">✓</div>
+  <div class="big">&check;</div>
   <h3>Got it.</h3>
   <p>Reply is coming to Discord.</p>
 </div>
 
 <script>
-async function send(){
-  const kind=document.getElementById("kind").value;
-  const msg=document.getElementById("msg").value.trim();
-  if(!msg){ alert("Write something first."); return; }
-  const btn=document.getElementById("send"); btn.disabled=true;
-  document.getElementById("err").style.display="none";
+var names = { radial: "Radial", arc: "Arc", stack: "Stack" };
+
+function selectedId(){
+  var r = document.querySelector('input[name="dial"]:checked');
+  return r ? r.value : null;
+}
+
+document.querySelectorAll('.card input[type="radio"]').forEach(function(input){
+  input.addEventListener("change", function(){
+    document.querySelectorAll(".card").forEach(function(c){
+      c.classList.toggle("selected", c.dataset.id === input.value);
+    });
+  });
+});
+
+async function submit(action){
+  var selected = selectedId();
+  var msg = document.getElementById("msg").value.trim();
+
+  if (action === "proceed" && !selected){
+    alert("Pick a dial first.");
+    return;
+  }
+  if (action === "feedback" && !selected && !msg){
+    alert("Pick a dial or write something first.");
+    return;
+  }
+
+  var label = selected ? names[selected] + " (" + selected + ")" : "no selection";
+  var comments = (action === "proceed" ? "Proceed: " : "Feedback: ") + label +
+    (msg ? "\n\n" + msg : "");
+
+  var sendBtn = document.getElementById("send");
+  var proceedBtn = document.getElementById("proceed");
+  sendBtn.disabled = true; proceedBtn.disabled = true;
+  document.getElementById("err").style.display = "none";
+
   try{
-    const r=await fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({action:"feedback", kind, comments:msg})});
-    if(!r.ok) throw new Error(await r.text());
-    document.getElementById("main").style.display="none";
-    document.getElementById("done").style.display="block";
+    var r = await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: action, selected: selected, comments: comments })
+    });
+    if (!r.ok) throw new Error(await r.text());
+    document.getElementById("main").style.display = "none";
+    document.getElementById("done").style.display = "block";
   }catch(e){
-    document.getElementById("err").style.display="block";
-    btn.disabled=false;
+    document.getElementById("err").style.display = "block";
+    sendBtn.disabled = false; proceedBtn.disabled = false;
   }
 }
-document.getElementById("send").onclick=send;
+
+document.getElementById("send").onclick = function(){ submit("feedback"); };
+document.getElementById("proceed").onclick = function(){ submit("proceed"); };
 </script>
 </body>
 </html>
