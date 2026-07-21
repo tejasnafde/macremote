@@ -17,16 +17,21 @@ class BrightnessLevel(BaseModel):
     display: str = "builtin"
 
 
-# An external monitor ignoring DDC is an expected, per-monitor condition, not a
-# server fault: return a clean "unsupported" so the app can toast it, instead of
-# a 502 that fires a Discord alert on every tap. Built-in failures still bubble
-# up to the global HSError handler as real errors.
+# An external monitor with neither DDC nor gamma control is an expected,
+# per-monitor condition, not a server fault: return a clean "unsupported" so
+# the app can toast it, instead of a 502 that fires a Discord alert on every
+# tap. Built-in failures still bubble up to the global HSError handler as real
+# errors. External ops report which path did the work ("ddc" or "gamma");
+# built-in ops have no via.
 async def _guard(coro) -> dict:
     try:
-        await coro
-        return {"ok": True}
+        via = await coro
     except DDCError:
         return {"ok": False, "display_unsupported": True}
+    result = {"ok": True}
+    if via is not None:
+        result["via"] = via
+    return result
 
 
 @router.post("/up")

@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # m1ddc CLI - DDC/CI control for external displays (brightness only, so far)
     M1DDC_BIN: str = "/opt/homebrew/bin/m1ddc"
 
+    # osascript - AppleScript bridge to Background Music (per-app volume)
+    OSASCRIPT_BIN: str = "/usr/bin/osascript"
+
     # HTTP
     PORT: int = 8484
 

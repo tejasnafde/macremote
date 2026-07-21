@@ -119,13 +119,22 @@ async function collectAndReport() {
 
   await setKnownTabs(nextKnown);
 
-  const tabs = Object.values(nextKnown).map((t) => ({
+  // Best-effort per-tab media volume (0-100 int, null when unreadable): the
+  // known set is small (only media tabs), so one cheap injection per tab per
+  // report keeps the phone's volume sliders in sync.
+  const volumes = {};
+  for (const tabIdKey of Object.keys(nextKnown)) {
+    volumes[tabIdKey] = await readTabVolume(Number(tabIdKey));
+  }
+
+  const tabs = Object.entries(nextKnown).map(([tabIdKey, t]) => ({
     tab_id: t.tabId,
     title: t.title,
     url_host: t.urlHost,
     audible: t.audible,
     muted: t.muted,
     playing: t.playing,
+    volume: volumes[tabIdKey],
   }));
 
   try {
@@ -139,6 +148,31 @@ async function collectAndReport() {
   }
 
   return tabs.length;
+}
+
+/**
+ * Reads the volume (0-100 int) of the tab's relevant media element: the
+ * playing one, else the largest by finite duration. Returns null whenever
+ * that is not cheaply possible (no media, restricted page, injection denied).
+ */
+async function readTabVolume(tabId) {
+  try {
+    const results = await api.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const media = Array.from(document.querySelectorAll("video, audio")).filter(
+          (el) => Number.isFinite(el.duration) && el.duration > 0
+        );
+        if (media.length === 0) return null;
+        const el = media.find((m) => !m.paused) || media.reduce((a, b) => (b.duration > a.duration ? b : a));
+        return Math.round((el.volume || 0) * 100);
+      },
+    });
+    const value = results && results[0] ? results[0].result : null;
+    return typeof value === "number" ? value : null;
+  } catch (err) {
+    return null;
+  }
 }
 
 async function togglePlayback(tabId) {
@@ -219,6 +253,32 @@ async function seekTab(tabId, seconds) {
   }
 }
 
+/**
+ * Sets the tab's media element volume (value is 0-100). Targets the playing
+ * element, else the largest finite-duration one - same selection as seek.
+ * Deliberately does NOT touch `muted`, even at 0: mute stays its own command,
+ * so volume 0 and mute remain independently reversible from the phone.
+ */
+async function setTabVolume(tabId, value) {
+  const level = Math.max(0, Math.min(100, Number(value) || 0));
+  try {
+    await api.scripting.executeScript({
+      target: { tabId },
+      args: [level],
+      func: (v) => {
+        const media = Array.from(document.querySelectorAll("video, audio")).filter(
+          (el) => Number.isFinite(el.duration) && el.duration > 0
+        );
+        if (media.length === 0) return;
+        const el = media.find((m) => !m.paused) || media.reduce((a, b) => (b.duration > a.duration ? b : a));
+        el.volume = v / 100;
+      },
+    });
+  } catch (err) {
+    console.error("macremote: setvolume injection failed", err);
+  }
+}
+
 async function executeCommand(command) {
   const tabId = command.tab_id;
   if (command.action === "playpause") {
@@ -229,6 +289,8 @@ async function executeCommand(command) {
     await toggleMute(tabId);
   } else if (command.action === "seek") {
     await seekTab(tabId, Number(command.value) || 0);
+  } else if (command.action === "setvolume") {
+    await setTabVolume(tabId, Number(command.value) || 0);
   } else {
     console.warn("macremote: unknown command action", command.action);
   }

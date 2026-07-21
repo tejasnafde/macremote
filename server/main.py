@@ -16,6 +16,7 @@ from common_helper.version import get_version
 from handler.sleep_timer_handler import sleep_timer_service
 from routers import (
     apps,
+    audio,
     brightness,
     browser,
     displays,
@@ -26,6 +27,7 @@ from routers import (
     status,
     system,
     volume,
+    windows,
 )
 
 
@@ -51,6 +53,8 @@ app.include_router(sleep_timer.router)
 app.include_router(status.router)
 app.include_router(input_router.router)
 app.include_router(apps.router)
+app.include_router(windows.router)
+app.include_router(audio.router)
 
 
 @app.exception_handler(HSError)

@@ -181,6 +181,54 @@ def focus_app(bundle_id: str) -> str:
     return f'hs.application.launchOrFocusByBundleID("{safe}")'
 
 
+# ── Window-grouped switcher ──────────────────────────────────────────────────
+# List standard windows as JSON [{id, app, bundle_id, title, screen, screen_id,
+# active}]. isStandard() filters palettes/panels/hidden scratch windows; the
+# application gate drops windows whose owning app has already quit.
+LIST_WINDOWS = (
+    "local out = {}; "
+    "local focused = hs.window.focusedWindow(); "
+    "for _, w in ipairs(hs.window.allWindows()) do "
+    "  local app = w:application(); "
+    "  if w:isStandard() and app then "
+    "    local scr = w:screen(); "
+    "    table.insert(out, {"
+    "      id = w:id(), "
+    "      app = app:name(), "
+    "      bundle_id = app:bundleID(), "
+    "      title = w:title() or '', "
+    "      screen = scr and scr:name() or '', "
+    "      screen_id = scr and scr:id() or 0, "
+    "      active = (w == focused)"
+    "    }) "
+    "  end "
+    "end; "
+    "return hs.json.encode(out)"
+)
+
+
+# Focus one window by hs id. Nil-safe: the window may have closed between the
+# phone's list refresh and the tap, which is a "gone", not a server error.
+def focus_window(window_id: int) -> str:
+    return (
+        f"local w = hs.window.get({int(window_id)}); "
+        "if w then w:focus(); return 'ok' else return 'gone' end"
+    )
+
+
+# ── Gamma dimming (external-display fallback when DDC/CI is unavailable) ─────
+# Framebuffer dimming via hs.screen:setGamma(whitepoint, blackpoint) - works
+# over any cable (verified live on real external hardware), but the backlight
+# stays on. level is 0-100 where 100 = no dimming.
+def gamma_set(screen_name: str, level: int) -> str:
+    safe = screen_name.replace("\\", "").replace('"', "")
+    return (
+        f'local s = hs.screen.find("{safe}"); '
+        f"if s then local l = {int(level)}/100; "
+        "s:setGamma({red=l, green=l, blue=l}, {red=0, green=0, blue=0}) end"
+    )
+
+
 # List running, visible (dock-worthy) apps as JSON [{name, bundle_id, active}].
 # Filters to regular apps with a bundle id, so background daemons and agents
 # (including macremote/Hammerspoon itself) do not clutter the switcher.

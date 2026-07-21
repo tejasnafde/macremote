@@ -110,6 +110,82 @@ sys.exit(resp["exit_code"])
 
 
 @pytest.fixture
+def fake_osascript(tmp_path, monkeypatch):
+    """A fake `osascript` CLI for the Background Music bridge: records every
+    invocation's script text and answers with canned output/exit code chosen
+    by SUBSTRING match against the script (AppleScripts here are multiline,
+    so exact-argv keying like fake_m1ddc's would be brittle). First matching
+    rule wins; falls back to a default. Point `settings.OSASCRIPT_BIN` at it
+    so tests never talk to System Events or a real Background Music app."""
+    script = tmp_path / "fake_osascript.py"
+    calls_file = tmp_path / "osa_calls.log"
+    rules_file = tmp_path / "osa_rules.json"
+
+    rules_file.write_text(json.dumps({"rules": [], "default": {"output": "", "exit_code": 1}}))
+
+    script.write_text(
+        f"""#!/usr/bin/env python3
+import json
+import sys
+
+# argv: -e <script> (possibly repeated); join all script args for matching.
+scripts = [a for a in sys.argv[1:] if a != "-e"]
+text = "\\n".join(scripts)
+
+with open({str(calls_file)!r}, "a") as f:
+    f.write(json.dumps(text) + "\\n")
+
+with open({str(rules_file)!r}) as f:
+    config = json.load(f)
+
+resp = config["default"]
+for rule in config["rules"]:
+    if rule["contains"] in text:
+        resp = rule
+        break
+sys.stdout.write(resp["output"])
+sys.exit(resp["exit_code"])
+"""
+    )
+    script.chmod(0o755)
+
+    class FakeOsascript:
+        path = str(script)
+
+        @property
+        def calls(self) -> list[str]:
+            if not calls_file.exists():
+                return []
+            return [json.loads(line) for line in calls_file.read_text().splitlines()]
+
+        def add_rule(self, contains: str, output: str, exit_code: int = 0) -> None:
+            config = json.loads(rules_file.read_text())
+            config["rules"].append(
+                {"contains": contains, "output": output, "exit_code": exit_code}
+            )
+            rules_file.write_text(json.dumps(config))
+
+        def set_default(self, output: str, exit_code: int = 0) -> None:
+            config = json.loads(rules_file.read_text())
+            config["default"] = {"output": output, "exit_code": exit_code}
+            rules_file.write_text(json.dumps(config))
+
+    monkeypatch.setattr(settings, "OSASCRIPT_BIN", str(script))
+    return FakeOsascript()
+
+
+@pytest.fixture
+def gamma_levels(monkeypatch):
+    """Fresh, isolated gamma-level store (it is otherwise module-level state
+    in brightness_handler, shared with displays_handler)."""
+    from handler import brightness_handler
+
+    fresh: dict[str, int] = {}
+    monkeypatch.setattr(brightness_handler, "gamma_levels", fresh)
+    return fresh
+
+
+@pytest.fixture
 def browser_registry(monkeypatch):
     """A fresh BrowserSessionRegistry with a fake, test-controlled clock so
     TTL expiry can be exercised without real sleeps, and so state never

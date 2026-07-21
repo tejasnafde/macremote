@@ -37,6 +37,7 @@ class BrowserSessionRegistry:
                 "audible": bool(tab.get("audible", False)),
                 "muted": bool(tab.get("muted", False)),
                 "playing": bool(tab.get("playing", False)),
+                "volume": tab.get("volume"),  # 0-100 or None when unreadable
                 "updated_at": now,
             }
 

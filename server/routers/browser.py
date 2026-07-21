@@ -5,7 +5,7 @@ import asyncio
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from common_helper import lua_snippets as lua
 from common_helper.auth import require_bearer_token
@@ -19,7 +19,7 @@ router = APIRouter(
 )
 
 BrowserName = Literal["firefox", "chrome"]
-CommandAction = Literal["playpause", "focus", "mute", "seek"]
+CommandAction = Literal["playpause", "focus", "mute", "seek", "setvolume"]
 
 
 class TabIn(BaseModel):
@@ -29,6 +29,7 @@ class TabIn(BaseModel):
     audible: bool = False
     muted: bool = False
     playing: bool = False
+    volume: int | None = None  # media element volume 0-100, when readable
 
 
 class ReportBody(BaseModel):
@@ -39,7 +40,17 @@ class ReportBody(BaseModel):
 class CommandBody(BaseModel):
     action: CommandAction
     browser: BrowserName
-    value: int | None = None  # seek delta in seconds (for action="seek")
+    # seek: delta in seconds (any sign); setvolume: absolute 0-100 (required)
+    value: int | None = None
+
+    @model_validator(mode="after")
+    def _validate_value(self) -> "CommandBody":
+        if self.action == "setvolume":
+            if self.value is None:
+                raise ValueError("setvolume requires a value (0-100)")
+            if not 0 <= self.value <= 100:
+                raise ValueError("setvolume value must be 0-100")
+        return self
 
 
 @router.post("/report")

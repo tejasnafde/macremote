@@ -36,8 +36,8 @@ def test_report_and_status_shape(client, fake_hs, browser_registry):
     status_resp = client.get("/status", headers=AUTH_HEADERS)
     assert status_resp.status_code == 200
     assert status_resp.json()["browser_tabs"] == [
-        {"tab_id": 1, "browser": "chrome", "title": "Song A", "playing": True, "audible": True},
-        {"tab_id": 2, "browser": "chrome", "title": "Song B", "playing": False, "audible": False},
+        {"tab_id": 1, "browser": "chrome", "title": "Song A", "playing": True, "audible": True, "volume": None},
+        {"tab_id": 2, "browser": "chrome", "title": "Song B", "playing": False, "audible": False, "volume": None},
     ]
 
 

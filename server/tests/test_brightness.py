@@ -69,7 +69,7 @@ def test_brightness_set_external(client, fake_m1ddc):
     resp = client.put("/brightness", headers=AUTH_HEADERS, json={"level": 60, "display": "1"})
 
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True, "level": 60, "display": "1"}
+    assert resp.json() == {"ok": True, "level": 60, "display": "1", "via": "ddc"}
     assert fake_m1ddc.calls == ["display 1 set luminance 60"]
 
 

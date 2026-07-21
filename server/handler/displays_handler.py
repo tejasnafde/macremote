@@ -10,6 +10,7 @@ from common_helper import lua_snippets as lua
 from common_helper.decorators import log_timing
 from common_helper.ddc_bridge import DDCError, parse_display_list, run_m1ddc
 from common_helper.hs_bridge import HSError, run_hs
+from handler import brightness_handler
 
 
 async def _builtin_brightness() -> int | None:
@@ -63,6 +64,9 @@ async def get_displays() -> dict:
                 "name": disp["name"],
                 "builtin": False,
                 "brightness": await _external_brightness(disp["index"]),
+                # Gamma-dimming fallback level (100 = undimmed) so the app can
+                # show the effective dim state when DDC is unavailable.
+                "gamma_level": brightness_handler.get_gamma_level(disp["name"]),
             }
         )
 
