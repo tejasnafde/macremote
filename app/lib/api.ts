@@ -40,9 +40,11 @@ export interface BrowserTab {
   title: string;
   playing: boolean;
   audible: boolean;
+  /** Media volume 0-100 when the extension reports it; absent/null on older servers. */
+  volume?: number | null;
 }
 
-export type BrowserTabAction = 'playpause' | 'focus' | 'mute' | 'seek';
+export type BrowserTabAction = 'playpause' | 'focus' | 'mute' | 'seek' | 'setvolume';
 
 export interface StatusResponse {
   now_playing: NowPlaying | null;
@@ -76,6 +78,8 @@ export interface Display {
   builtin: boolean;
   /** null when the display doesn't report brightness (probe failed or unsupported). */
   brightness: number | null;
+  /** Software gamma dim level when the server is dimming this display without DDC. */
+  gamma_level?: number | null;
 }
 
 export interface DisplaysResponse {
@@ -86,6 +90,8 @@ export interface BrightnessResult {
   ok: boolean;
   /** true when an external monitor ignored the DDC command (unsupported, not an error). */
   display_unsupported?: boolean;
+  /** How the change landed: real DDC backlight control or software gamma dimming. */
+  via?: 'ddc' | 'gamma';
 }
 
 /** Navigation keys the server's /input/key endpoint accepts (422 on anything else). */
@@ -109,6 +115,50 @@ export interface AppEntry {
 
 export interface AppsResponse {
   apps: AppEntry[];
+}
+
+export interface WindowEntry {
+  id: number;
+  app: string;
+  bundle_id: string;
+  title: string;
+  /** true for the focused window; the active window is listed first on its display. */
+  active: boolean;
+}
+
+export interface DisplayWindows {
+  name: string;
+  id: number;
+  windows: WindowEntry[];
+}
+
+export interface WindowsResponse {
+  /** Active display first, active window first within it. */
+  displays: DisplayWindows[];
+}
+
+export interface FocusWindowResult {
+  ok: boolean;
+  /** true when the window closed between listing and focusing (not an error). */
+  gone?: boolean;
+}
+
+export interface AudioApp {
+  name: string;
+  /** 0-100 via the Background Music driver. */
+  volume: number;
+}
+
+export interface AudioAppsResponse {
+  /** false when the Background Music driver is not installed; hide the feature. */
+  available: boolean;
+  apps: AudioApp[];
+}
+
+export interface SetAppVolumeResult {
+  ok: boolean;
+  /** false when the driver disappeared between list and set. */
+  available?: boolean;
 }
 
 async function requestWithConfig<T>(
@@ -203,7 +253,8 @@ export const api = {
   cancelSleepTimer: (): Promise<void> => request('/sleep-timer', { method: 'DELETE' }),
 
   /** Fire-and-forget: the extension executes it within ~2s of its next poll.
-   *  `value` carries the seek delta in seconds when action is "seek". */
+   *  `value` carries the seek delta in seconds when action is "seek", or the
+   *  target volume 0-100 when action is "setvolume". */
   tabCommand: (tabId: number, browser: string, action: BrowserTabAction, value?: number): Promise<void> =>
     request(`/browser/tabs/${tabId}/command`, {
       method: 'POST',
@@ -222,6 +273,21 @@ export const api = {
   /** Raise the app with this bundle id to the front. */
   focusApp: (bundleId: string): Promise<void> =>
     request('/apps/focus', { method: 'POST', body: JSON.stringify({ bundle_id: bundleId }) }),
+
+  /** Windows grouped by display, active display and active window first.
+   *  404 on servers older than v0.4 (callers fall back to listApps). */
+  listWindows: (): Promise<WindowsResponse> => request<WindowsResponse>('/windows'),
+  /** Raise a specific window. Resolves {ok:false, gone:true} when it closed since listing. */
+  focusWindow: (windowId: number): Promise<FocusWindowResult> =>
+    request(`/windows/${windowId}/focus`, { method: 'POST' }),
+
+  /** Per-app volumes via the Background Music driver; available:false when not installed. */
+  listAudioApps: (): Promise<AudioAppsResponse> => request<AudioAppsResponse>('/audio/apps'),
+  setAppVolume: (name: string, volume: number): Promise<SetAppVolumeResult> =>
+    request('/audio/apps', {
+      method: 'PUT',
+      body: JSON.stringify({ name, volume: Math.max(0, Math.min(100, Math.round(volume))) }),
+    }),
 
   status: (): Promise<StatusResponse> => request<StatusResponse>('/status'),
   health: (): Promise<HealthResponse> => request<HealthResponse>('/health'),
