@@ -174,14 +174,27 @@ sys.exit(resp["exit_code"])
     return FakeOsascript()
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def gamma_levels(monkeypatch):
     """Fresh, isolated gamma-level store (it is otherwise module-level state
-    in brightness_handler, shared with displays_handler)."""
+    in brightness_handler, shared with displays_handler). Autouse so a gamma
+    write in one test never leaks its level into another's /displays shape."""
     from handler import brightness_handler
 
     fresh: dict[str, int] = {}
     monkeypatch.setattr(brightness_handler, "gamma_levels", fresh)
+    return fresh
+
+
+@pytest.fixture(autouse=True)
+def display_methods(monkeypatch):
+    """Fresh, isolated per-display dimming-method store so method choices do
+    not leak between tests. Default (empty) means every external display uses
+    gamma, matching production."""
+    from handler import brightness_handler
+
+    fresh: dict[str, str] = {}
+    monkeypatch.setattr(brightness_handler, "display_methods", fresh)
     return fresh
 
 

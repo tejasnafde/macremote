@@ -24,11 +24,28 @@ BUILTIN = "builtin"
 # on display reconfiguration.
 gamma_levels: dict[str, int] = {}
 
+# Per-display dimming method by NAME: "gamma" (framebuffer, works over ANY
+# cable and on monitors that silently ignore DDC) or "ddc" (true backlight,
+# only for monitors that actually honor it). Default is gamma because m1ddc's
+# `set` exits 0 even when the monitor ignores it, so DDC "success" is a lie we
+# cannot detect: gamma always visibly works. A user with a real DDC monitor can
+# opt that display into "ddc" via PUT /displays/{id}/method.
+display_methods: dict[str, str] = {}
+DEFAULT_METHOD = "gamma"
+
 GAMMA_FLOOR = 15  # never fully black: the user must keep seeing the screen
 
 
 def get_gamma_level(display_name: str) -> int:
     return gamma_levels.get(display_name, 100)
+
+
+def get_method(display_name: str) -> str:
+    return display_methods.get(display_name, DEFAULT_METHOD)
+
+
+def set_method(display_name: str, method: str) -> None:
+    display_methods[display_name] = "ddc" if method == "ddc" else "gamma"
 
 
 def _clamp(level: int) -> int:
@@ -77,6 +94,10 @@ async def _gamma_fallback(display: str, *, delta: int = 0, absolute: int | None 
 
 
 async def _external_step(display: str, delta: int) -> str:
+    # Gamma by default (always works); DDC only if this display was opted in.
+    name = await _external_name(display)
+    if get_method(name) == "gamma":
+        return await _gamma_fallback(display, delta=delta)
     try:
         current = await _external_get_luminance(display)
         await _external_set_luminance(display, current + delta)
@@ -106,6 +127,9 @@ async def brightness_set(level: int, display: str = BUILTIN) -> str | None:
     if display == BUILTIN:
         await asyncio.to_thread(run_hs, lua.brightness_set(_clamp(level)))
         return None
+    name = await _external_name(display)
+    if get_method(name) == "gamma":
+        return await _gamma_fallback(display, absolute=level)
     try:
         await _external_set_luminance(display, level)
         return "ddc"

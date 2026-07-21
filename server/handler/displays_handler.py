@@ -46,6 +46,15 @@ async def _external_brightness(index: int) -> int | None:
         return None
 
 
+async def resolve_external_name(display_id: str) -> str:
+    """Map an m1ddc display index (as string) to its monitor name. Raises
+    KeyError if no external display matches (DDCError if m1ddc is unavailable)."""
+    for disp in await _external_displays():
+        if str(disp["index"]) == str(display_id):
+            return disp["name"]
+    raise KeyError(display_id)
+
+
 @log_timing("displays.get")
 async def get_displays() -> dict:
     displays = [
@@ -64,9 +73,12 @@ async def get_displays() -> dict:
                 "name": disp["name"],
                 "builtin": False,
                 "brightness": await _external_brightness(disp["index"]),
-                # Gamma-dimming fallback level (100 = undimmed) so the app can
-                # show the effective dim state when DDC is unavailable.
+                # Gamma-dimming level (100 = undimmed) so the app can show the
+                # effective dim state.
                 "gamma_level": brightness_handler.get_gamma_level(disp["name"]),
+                # "gamma" (default, works on any monitor) or "ddc" (opt-in for
+                # monitors that truly honor hardware brightness).
+                "method": brightness_handler.get_method(disp["name"]),
             }
         )
 

@@ -20,6 +20,7 @@ def test_displays_shape_builtin_and_external(client, fake_hs, fake_m1ddc):
                 "builtin": False,
                 "brightness": 77,
                 "gamma_level": 100,
+                "method": "gamma",
             },
         ]
     }
@@ -71,6 +72,7 @@ def test_displays_external_luminance_probe_failure_is_null(client, fake_hs, fake
         "builtin": False,
         "brightness": None,
         "gamma_level": 100,
+        "method": "gamma",
     }
 
 
