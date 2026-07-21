@@ -425,3 +425,22 @@ or `app.json` change, no new dependencies.
       `song repeat` (off/one/all); browsers have no standard. Plan: server
       POST /media/repeat {mode} best-effort per running app; app control in the
       now-playing area. Build next unless reading gesture pad is reprioritized.
+
+## v0.4 scope (user, 2026-07-16)
+- Window-grouped app switcher: /windows lists windows grouped by display
+  (hs.window.allWindows + screen name); focus a specific window (w:focus()).
+  Covers two Firefox windows on different monitors.
+- External brightness generic fallback: per-display GAMMA dimming
+  (hs.screen setGamma) when DDC does not work. Works over any cable
+  (verified live on the LG over HDMI-C). Caveat: framebuffer dimming,
+  backlight stays on. DDC remains preferred when available.
+- Per-tab volume: extension setvolume command (el.volume), slider + mute in
+  the app tabs UI. Covers muted stream + loud YT Music case.
+- Per-app system volume: Background Music virtual audio driver (open
+  source), driven via its AppleScript API from the server. Requires install
+  with admin password (user step) and may not support macOS 26, probe first
+  and degrade honestly.
+- HDMI DDC packet sniffing: rejected. DDC is I2C inside the cable,
+  terminated by the converter chip, nothing software-visible to sniff or
+  spoof on the Mac side. Hardware bridge would be required, not worth it
+  vs a USB-C to DP cable or gamma dimming.
