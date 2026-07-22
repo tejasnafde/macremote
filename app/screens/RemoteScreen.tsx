@@ -49,6 +49,7 @@ import { getBrightnessTarget, setBrightnessTarget } from '../lib/displayTarget';
 import { getMediaNotificationEnabled } from '../lib/settings';
 import { useMediaNotification } from '../lib/useMediaNotification';
 import { colors, fonts, radii, railWidth, spacing } from '../theme';
+import { BrightnessDial } from './remote/BrightnessDial';
 import { DisplayChooser } from './remote/DisplayChooser';
 import { DisplayHelpCard } from './remote/DisplayHelpCard';
 import { LockOverlay } from './remote/LockOverlay';
@@ -181,26 +182,14 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
       pollRef.current = setInterval(refreshStatus, POLL_MS);
     }
     startPolling();
-    // Kill any running brightness/volume hold-repeat when we lose focus, so a
-    // press whose release we never saw can't keep firing in the background.
-    function stopHolds() {
-      if (brightHold.current) {
-        clearInterval(brightHold.current);
-        brightHold.current = null;
-      }
-    }
     let appState = AppState.currentState;
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'active' && appState !== 'active') startPolling();
-      else if (next !== 'active') {
-        stopPolling();
-        stopHolds();
-      }
+      else if (next !== 'active') stopPolling();
       appState = next;
     });
     return () => {
       stopPolling();
-      stopHolds();
       sub.remove();
     };
   }, [refreshStatus, refreshToken]);
@@ -333,60 +322,8 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
     return hasMultipleDisplays && brightnessTargetId ? brightnessTargetId : undefined;
   }
 
-  const brightHold = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Safety cap: a held brightness button repeats, but if the press-out event is
-  // ever lost (finger slides off, gesture cancelled, app backgrounded mid-press)
-  // an uncapped interval would drive brightness to 0/100 forever and fight any
-  // manual change on the Mac. 18 steps x 6 = full 0..100 range, then it stops on
-  // its own and the user re-presses to continue.
-  const MAX_BRIGHT_REPEATS = 18;
-  const brightRepeats = useRef(0);
-  function startBrightnessHold(direction: 'up' | 'down') {
-    const target = currentBrightnessTarget();
-    const action = () => (direction === 'up' ? api.brightnessUp(target) : api.brightnessDown(target));
-    // First tap awaits the result: if the external monitor ignores DDC, say so
-    // once and skip the hold-repeat (pointless to hammer an unsupported display).
-    action()
-      .then((res) => {
-        if (res?.display_unsupported) {
-          // First time per session: open the full help card. After that a
-          // short toast plus the "?" icon (which reopens the card on demand).
-          if (!helpAutoShownRef.current) {
-            helpAutoShownRef.current = true;
-            setHelpOpen(true);
-          } else {
-            toast.show('This display is not accepting brightness commands', 2400);
-          }
-          return;
-        }
-        // First gamma fallback of the session: name the mechanism once so a
-        // backlight that visibly stays lit is not read as a broken control.
-        if (res?.via === 'gamma' && !gammaToastShownRef.current) {
-          gammaToastShownRef.current = true;
-          toast.show('Dimming in software (DDC unavailable)', 2400);
-        } else {
-          toast.show(direction === 'up' ? 'Brightness up' : 'Brightness down', 1100);
-        }
-        if (brightHold.current) clearInterval(brightHold.current);
-        brightRepeats.current = 0;
-        brightHold.current = setInterval(() => {
-          if (brightRepeats.current >= MAX_BRIGHT_REPEATS) {
-            stopBrightnessHold();
-            return;
-          }
-          brightRepeats.current += 1;
-          action().catch(() => undefined);
-        }, 220);
-      })
-      .catch(() => undefined);
-  }
-  function stopBrightnessHold() {
-    if (brightHold.current) {
-      clearInterval(brightHold.current);
-      brightHold.current = null;
-      refreshStatus();
-    }
-  }
+  // Brightness is now the radial BrightnessDial (drag to set absolute level per
+  // display); the old step-button hold-repeat and its runaway guards are gone.
 
   async function handleSelectDisplay(id: string) {
     setBrightnessTargetId(id);
@@ -591,51 +528,18 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
             </PressableScale>
           </View>
 
+          <View style={styles.dialWrap}>
+            <BrightnessDial
+              displays={displays ?? []}
+              selectedId={brightnessTargetId}
+              deviceName={deviceName}
+              fallbackBrightness={status?.brightness ?? null}
+              disabled={!online}
+              onSelectDisplay={handleSelectDisplay}
+              onOpenChooser={() => setDisplayChooserOpen(true)}
+            />
+          </View>
           <View style={styles.secondaryRow}>
-            <View style={styles.brightCluster}>
-              <View style={styles.brightPair}>
-                <PressableScale
-                  style={styles.sBtn}
-                  onPressIn={() => startBrightnessHold('down')}
-                  onPressOut={stopBrightnessHold}
-                  accessibilityLabel="Brightness down"
-                >
-                  <IconBrightnessDown size={17} color={colors.off72} />
-                </PressableScale>
-                <View style={styles.brightUpWrap}>
-                  <PressableScale
-                    style={styles.sBtn}
-                    onPressIn={() => startBrightnessHold('up')}
-                    onPressOut={stopBrightnessHold}
-                    accessibilityLabel="Brightness up"
-                  >
-                    <IconBrightnessUp size={17} color={colors.off72} />
-                  </PressableScale>
-                </View>
-              </View>
-              {hasMultipleDisplays && (
-                <View style={styles.brightTargetRow}>
-                  <PressableScale
-                    onPress={() => setDisplayChooserOpen(true)}
-                    accessibilityLabel="Choose brightness target display"
-                    hitSlop={10}
-                  >
-                    <Text style={styles.brightTargetLabel} numberOfLines={1}>
-                      {activeDisplay?.name ?? 'Built-in'}
-                    </Text>
-                  </PressableScale>
-                  {activeDisplay && !activeDisplay.builtin && (
-                    <PressableScale
-                      onPress={() => setHelpOpen(true)}
-                      accessibilityLabel="Why is external brightness not working"
-                      hitSlop={10}
-                    >
-                      <IconHelp size={14} color={colors.off38} />
-                    </PressableScale>
-                  )}
-                </View>
-              )}
-            </View>
             <PressableScale style={styles.sBtn} onPress={handleLockPress} accessibilityLabel="Lock">
               <IconLock size={17} color={colors.off72} />
             </PressableScale>
@@ -1321,7 +1225,8 @@ const styles = StyleSheet.create({
   // (not center) because the brightness cluster below can grow one text
   // line taller when a non-builtin target is active; top-aligning keeps
   // every icon at the same y regardless.
-  secondaryRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 10, marginTop: 22 },
+  dialWrap: { alignItems: 'center', justifyContent: 'center', marginTop: 18 },
+  secondaryRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 10, marginTop: 20 },
   sBtn: {
     width: 44,
     height: 44,

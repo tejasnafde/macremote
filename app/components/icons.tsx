@@ -302,10 +302,12 @@ export function IconChevronStack({ size = 15, color = '#4ade80' }: IconProps) {
 }
 
 export function IconCursor({ size = 20, color = '#f3f5f1' }: IconProps) {
+  // Pointer arrow centered in the 24x24 box (ink bbox ~6..18 both axes) so it
+  // sits centered inside the round button.
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M4.5 3.5 19 9.8l-6.2 1.7-2.6 6.1z"
+        d="M6 5 18.5 10.6l-5.3 1.5-2.2 5.4z"
         stroke={color}
         strokeWidth={1.6}
         strokeLinecap="round"

@@ -80,6 +80,8 @@ export interface Display {
   brightness: number | null;
   /** Software gamma dim level when the server is dimming this display without DDC. */
   gamma_level?: number | null;
+  /** How this display's brightness is driven: real DDC backlight vs software gamma. */
+  method?: 'ddc' | 'gamma';
 }
 
 export interface DisplaysResponse {
@@ -92,6 +94,10 @@ export interface BrightnessResult {
   display_unsupported?: boolean;
   /** How the change landed: real DDC backlight control or software gamma dimming. */
   via?: 'ddc' | 'gamma';
+  /** The absolute level the server applied (echoed back by PUT /brightness). */
+  level?: number;
+  /** The display id the change landed on (echoed back by PUT /brightness). */
+  display?: string;
 }
 
 /** Navigation keys the server's /input/key endpoint accepts (422 on anything else). */
@@ -236,6 +242,14 @@ export const api = {
     request(`/brightness/up${display ? `?display=${encodeURIComponent(display)}` : ''}`, { method: 'POST' }),
   brightnessDown: (display?: string): Promise<BrightnessResult> =>
     request(`/brightness/down${display ? `?display=${encodeURIComponent(display)}` : ''}`, { method: 'POST' }),
+
+  /** Set an ABSOLUTE brightness level (0-100) on a specific /displays id.
+   *  Resolves {ok, via, level, display}; `via:'gamma'` means software dimming. */
+  setBrightness: (level: number, display: string): Promise<BrightnessResult> =>
+    request('/brightness', {
+      method: 'PUT',
+      body: JSON.stringify({ level: Math.max(0, Math.min(100, Math.round(level))), display }),
+    }),
 
   displays: (): Promise<DisplaysResponse> => request<DisplaysResponse>('/displays'),
 
