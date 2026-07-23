@@ -92,6 +92,49 @@ jobs:
             '{username:"macremote", embeds:[{title:$title, description:$desc, color:3447003}]}')" \
             "${{ secrets.DISCORD_WEBHOOK_URL }}"
 
+  sign-extension:
+    # Produce a permanently-installable Firefox .xpi (Mozilla-signed, unlisted)
+    # so the browser bridge no longer needs reloading as a temporary add-on.
+    # Skips cleanly until the AMO API credentials are added as repo secrets.
+    needs: build-apk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Sign Firefox extension (unlisted)
+        id: sign
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          if [ -z "$AMO_JWT_ISSUER" ] || [ -z "$AMO_JWT_SECRET" ]; then
+            echo "AMO credentials not set - skipping extension signing."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          cd extension && ./build.sh
+          npx --yes web-ext@8 sign \
+            --source-dir dist/firefox \
+            --channel unlisted \
+            --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET" \
+            --artifacts-dir dist/signed
+          XPI="$(ls dist/signed/*.xpi | head -1)"
+          cp "$XPI" "../macremote-firefox-${GITHUB_REF_NAME}.xpi"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+      - name: Attach signed .xpi to the release + notify
+        if: steps.sign.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" "macremote-firefox-${GITHUB_REF_NAME}.xpi" --clobber
+          DL="${{ github.server_url }}/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/macremote-firefox-${GITHUB_REF_NAME}.xpi"
+          curl -sf -H 'Content-Type: application/json' -d "$(jq -n \
+            --arg desc "Signed Firefox extension ready. Open this .xpi once in Firefox and it installs permanently (no more about:debugging reloads): $DL" \
+            '{username:"macremote", embeds:[{title:"Firefox extension signed", description:$desc, color:3447003}]}')" \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}" || true
+
   notify-failure:
     if: failure()
     needs: [test, build-apk]

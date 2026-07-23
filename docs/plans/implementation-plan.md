@@ -476,3 +476,15 @@ or `app.json` change, no new dependencies.
       house style.
 - [x] Acceptance: `npm run typecheck` green; `npx expo export --platform
       android` clean.
+
+## v0.4.2 + extension signing (2026-07-23)
+- Per-tab fullscreen: POST /browser/tabs/{id}/fullscreen focuses the tab
+  (extension), raises the browser (HS), then sends a real 'f' key after ~2.4s.
+  App: expand button per browser tab row. True video fullscreen on 'f'-mapped
+  sites (YouTube etc.); no-op key elsewhere. Shipped v0.4.2.
+- Permanent Firefox extension: release.yml `sign-extension` job runs
+  `web-ext sign --channel unlisted` when AMO_JWT_ISSUER + AMO_JWT_SECRET repo
+  secrets exist, attaches macremote-firefox-<tag>.xpi to the release. USER must
+  create the API key/secret at addons.mozilla.org/developers (free) and add
+  them as repo secrets. Then the signed .xpi installs permanently (no
+  about:debugging reload). TODO: update_url + updates.json for auto-update.
