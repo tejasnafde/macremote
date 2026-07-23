@@ -29,6 +29,7 @@ import {
   IconDownload,
   IconHelp,
   IconLock,
+  IconExpand,
   IconMute,
   IconNext,
   IconPause,
@@ -273,6 +274,15 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
     }
   }
 
+  async function handleTabFullscreen(tab: BrowserTab) {
+    try {
+      await api.tabFullscreen(tab.tab_id, tab.browser);
+      toast.show('Switching and going fullscreen', 1800);
+    } catch (err) {
+      toast.show(errMessage(err));
+    }
+  }
+
   function handleTabVolumeSend(tab: BrowserTab, v: number) {
     // Throttled drag updates fail silently; the commit on release retries.
     api.tabCommand(tab.tab_id, tab.browser, 'setvolume', Math.round(v)).catch(() => undefined);
@@ -487,6 +497,7 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
             tabs={status.browser_tabs}
             optimisticPlaying={optimisticTabPlaying}
             onCommand={handleTabCommand}
+            onFullscreen={handleTabFullscreen}
             onVolumeSend={handleTabVolumeSend}
             onVolumeCommit={handleTabVolumeCommit}
           />
@@ -749,12 +760,14 @@ function BrowserTabsSection({
   tabs,
   optimisticPlaying,
   onCommand,
+  onFullscreen,
   onVolumeSend,
   onVolumeCommit,
 }: {
   tabs: BrowserTab[];
   optimisticPlaying: Record<number, boolean>;
   onCommand: (tab: BrowserTab, action: BrowserTabAction) => void;
+  onFullscreen: (tab: BrowserTab) => void;
   onVolumeSend: (tab: BrowserTab, v: number) => void;
   onVolumeCommit: (tab: BrowserTab, v: number) => void;
 }) {
@@ -786,6 +799,7 @@ function BrowserTabsSection({
               volumeOpen={openVolumeKey === key}
               onToggleVolume={() => setOpenVolumeKey((prev) => (prev === key ? null : key))}
               onCommand={(action) => onCommand(tab, action)}
+              onFullscreen={() => onFullscreen(tab)}
               onVolumeSend={(v) => onVolumeSend(tab, v)}
               onVolumeCommit={(v) => onVolumeCommit(tab, v)}
             />
@@ -803,6 +817,7 @@ function BrowserTabRow({
   volumeOpen,
   onToggleVolume,
   onCommand,
+  onFullscreen,
   onVolumeSend,
   onVolumeCommit,
 }: {
@@ -812,6 +827,7 @@ function BrowserTabRow({
   volumeOpen: boolean;
   onToggleVolume: () => void;
   onCommand: (action: BrowserTabAction) => void;
+  onFullscreen: () => void;
   onVolumeSend: (v: number) => void;
   onVolumeCommit: (v: number) => void;
 }) {
@@ -834,6 +850,9 @@ function BrowserTabRow({
           </PressableScale>
           <PressableScale style={styles.browserBtn} onPress={() => onCommand('focus')} accessibilityLabel="Focus tab">
             <IconArrowUpRight size={13} color={colors.off72} />
+          </PressableScale>
+          <PressableScale style={styles.browserBtn} onPress={onFullscreen} accessibilityLabel="Switch and fullscreen tab">
+            <IconExpand size={13} color={colors.off72} />
           </PressableScale>
           <PressableScale style={styles.browserBtn} onPress={() => onCommand('mute')} accessibilityLabel="Mute tab">
             <IconMute size={13} color={colors.off72} />

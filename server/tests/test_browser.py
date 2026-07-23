@@ -180,3 +180,18 @@ def test_command_rejects_invalid_action(client):
         json={"action": "rewind", "browser": "chrome"},
     )
     assert resp.status_code == 422
+
+
+def test_fullscreen_tab_enqueues_focus_and_raises(client, fake_hs, browser_registry):
+    resp = client.post("/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    # It queues a focus command for the extension...
+    cmds = client.get("/browser/commands?browser=firefox", headers=AUTH_HEADERS).json()["commands"]
+    assert any(c["tab_id"] == 7 and c["action"] == "focus" for c in cmds)
+    # ...and raises the browser app on the Mac.
+    assert any("launchOrFocusByBundleID" in c and "firefox" in c for c in fake_hs.calls)
+
+
+def test_fullscreen_tab_requires_auth(client, fake_hs):
+    assert client.post("/browser/tabs/7/fullscreen", json={"browser": "firefox"}).status_code == 401

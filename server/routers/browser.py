@@ -37,6 +37,10 @@ class ReportBody(BaseModel):
     tabs: list[TabIn]
 
 
+class BrowserBody(BaseModel):
+    browser: BrowserName
+
+
 class CommandBody(BaseModel):
     action: CommandAction
     browser: BrowserName
@@ -82,3 +86,36 @@ async def enqueue_command(tab_id: int, body: CommandBody) -> dict:
             except HSError:
                 pass
     return {"ok": True, "command": command}
+
+
+# How long to wait after focusing a tab before sending the fullscreen key: the
+# extension activates the tab on its command poll (up to ~2s), and only then is
+# the right video frontmost to receive the keystroke.
+_FULLSCREEN_KEY_DELAY_S = 2.4
+
+
+async def _delayed_fullscreen_key() -> None:
+    # A real OS keystroke (unlike an injected click) carries the user activation
+    # browsers require to enter video fullscreen. "f" is the fullscreen shortcut
+    # on YouTube and most players; on sites that do not map it this is a no-op.
+    await asyncio.sleep(_FULLSCREEN_KEY_DELAY_S)
+    try:
+        await asyncio.to_thread(run_hs, lua.key_press("f"))
+    except HSError:
+        pass
+
+
+@router.post("/tabs/{tab_id}/fullscreen")
+async def fullscreen_tab(tab_id: int, body: BrowserBody) -> dict:
+    """Switch to a tab and take its video fullscreen: activate the tab
+    (extension), raise the browser (Hammerspoon), then send a real 'f' key once
+    it is frontmost. Returns immediately; the key fires on a short delay."""
+    browser_sessions.registry.enqueue_command(body.browser, tab_id, "focus")
+    bundle = _BROWSER_BUNDLE.get(body.browser)
+    if bundle:
+        try:
+            await asyncio.to_thread(run_hs, lua.focus_app(bundle))
+        except HSError:
+            pass
+    asyncio.create_task(_delayed_fullscreen_key())
+    return {"ok": True, "note": "fullscreen requested"}
