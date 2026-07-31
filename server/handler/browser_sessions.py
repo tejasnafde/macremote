@@ -53,8 +53,10 @@ class BrowserSessionRegistry:
                 "muted": bool(tab.get("muted", False)),
                 "playing": bool(tab.get("playing", False)),
                 "volume": tab.get("volume"),  # 0-100 or None when unreadable
-                "active": bool(tab.get("active", False)),
-                "fullscreen": bool(tab.get("fullscreen", False)),
+                # Kept nullable on purpose: None marks a pre-fullscreen-ack
+                # extension build, which is not the same as False.
+                "active": tab.get("active"),
+                "fullscreen": tab.get("fullscreen"),
                 "updated_at": now,
             }
 

@@ -321,3 +321,18 @@ def test_fullscreen_second_tap_does_not_double_toggle(client, fake_hs, browser_r
 
 def test_fullscreen_tab_requires_auth(client, fake_hs):
     assert client.post("/browser/tabs/7/fullscreen", json={"browser": "firefox"}).status_code == 401
+
+
+def test_fullscreen_tells_you_to_reload_an_old_extension(client, fake_hs, browser_registry):
+    """A build that never reports `active` can never satisfy the ack, so the
+    button would do nothing at all. The extension is reloaded by hand while the
+    server auto-updates, so this pairing really happens."""
+    client.post(
+        "/browser/report",
+        headers=AUTH_HEADERS,
+        json={"browser": "firefox", "tabs": [{"tab_id": 7, "playing": True}]},
+    )
+    resp = client.post("/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"})
+    assert resp.json()["ok"] is False
+    assert "Reload" in resp.json()["note"]
+    assert not _wait_for_f(fake_hs, timeout=0.5)

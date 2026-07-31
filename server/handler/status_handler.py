@@ -36,7 +36,7 @@ async def get_status() -> dict:
             "audible": tab["audible"],
             "muted": tab["muted"],
             "volume": tab.get("volume"),
-            "fullscreen": tab.get("fullscreen", False),
+            "fullscreen": bool(tab.get("fullscreen")),  # None (old extension) reads as False
         }
         for tab in browser_sessions.registry.list_tabs()
     ]

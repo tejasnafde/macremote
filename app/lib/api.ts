@@ -286,7 +286,7 @@ export const api = {
 
   /** Switch to a tab and take its video fullscreen (server focuses the tab then
    *  sends a real 'f' key after a short delay; works on YouTube and 'f'-mapped sites). */
-  tabFullscreen: (tabId: number, browser: string): Promise<void> =>
+  tabFullscreen: (tabId: number, browser: string): Promise<{ ok: boolean; note?: string }> =>
     request(`/browser/tabs/${tabId}/fullscreen`, { method: 'POST', body: JSON.stringify({ browser }) }),
 
   /** Scroll the frontmost Mac app by a pixel delta (server clamps each axis to -4000..4000). */

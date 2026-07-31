@@ -33,8 +33,11 @@ class TabIn(BaseModel):
     muted: bool = False
     playing: bool = False
     volume: int | None = None  # media element volume 0-100, when readable
-    active: bool = False  # is the selected tab in its window
-    fullscreen: bool = False
+    # None means the extension predates these fields. The extension is loaded
+    # unpacked and reloaded by hand, while the server auto-updates, so "new
+    # server, old extension" is a real state and must not fail silently.
+    active: bool | None = None  # is the selected tab in its window
+    fullscreen: bool | None = None
 
 
 class ReportBody(BaseModel):
@@ -155,6 +158,12 @@ async def fullscreen_tab(tab_id: int, body: BrowserBody) -> dict:
     key = f"{body.browser}:{tab_id}"
     if key in _fullscreen_pending:
         return {"ok": True, "note": "fullscreen already pending"}
+
+    # An extension that never reports `active` can never satisfy the ack, so the
+    # button would do nothing at all with no explanation. Say so instead.
+    known = browser_sessions.registry.get_tab(body.browser, tab_id)
+    if known and known["active"] is None:
+        return {"ok": False, "note": "Reload the macremote browser extension to use fullscreen"}
 
     # Take the clock reading BEFORE queueing, so only a report that lands after
     # this point can satisfy the ack.

@@ -348,8 +348,10 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
 
   async function handleTabFullscreen(tab: BrowserTab) {
     try {
-      await api.tabFullscreen(tab.tab_id, tab.browser);
-      toast.show('Switching and going fullscreen', 1800);
+      const res = await api.tabFullscreen(tab.tab_id, tab.browser);
+      // The server declines when the browser is not running, or when the
+      // extension is too old to confirm the tab switch. Say which.
+      toast.show(res?.ok === false ? res.note ?? 'Could not go fullscreen' : 'Switching and going fullscreen', 2200);
     } catch (err) {
       toast.show(errMessage(err));
     }
