@@ -45,6 +45,9 @@ export interface BrowserTab {
   /** Media volume 0-100 when the extension reports it; absent/null on older servers. */
   volume?: number | null;
   fullscreen?: boolean;
+  /** False when the extension found no media element it can drive (iframe or
+   *  shadow-DOM player). Absent on older servers; treat that as true. */
+  controllable?: boolean | null;
 }
 
 /** Stable key for a tab: ids are per-browser and collide across browsers. */

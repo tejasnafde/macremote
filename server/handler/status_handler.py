@@ -37,6 +37,9 @@ async def get_status() -> dict:
             "muted": tab["muted"],
             "volume": tab.get("volume"),
             "fullscreen": bool(tab.get("fullscreen")),  # None (old extension) reads as False
+            # Left nullable: None means an extension too old to say, which the app
+            # must treat as "assume controllable" to preserve old behaviour.
+            "controllable": tab.get("controllable"),
         }
         for tab in browser_sessions.registry.list_tabs()
     ]

@@ -60,12 +60,12 @@ def test_report_and_status_shape(client, fake_hs, browser_registry):
     assert status_resp.status_code == 200
     assert status_resp.json()["browser_tabs"] == [
         {
-            "tab_id": 1, "browser": "chrome", "title": "Song A",
-            "playing": True, "audible": True, "muted": False, "volume": None, "fullscreen": False,
+            "tab_id": 1, "browser": "chrome", "title": "Song A", "playing": True,
+            "audible": True, "muted": False, "volume": None, "fullscreen": False, "controllable": None,
         },
         {
-            "tab_id": 2, "browser": "chrome", "title": "Song B",
-            "playing": False, "audible": False, "muted": True, "volume": None, "fullscreen": False,
+            "tab_id": 2, "browser": "chrome", "title": "Song B", "playing": False,
+            "audible": False, "muted": True, "volume": None, "fullscreen": False, "controllable": None,
         },
     ]
 
@@ -336,3 +336,23 @@ def test_fullscreen_tells_you_to_reload_an_old_extension(client, fake_hs, browse
     assert resp.json()["ok"] is False
     assert "Reload" in resp.json()["note"]
     assert not _wait_for_f(fake_hs, timeout=0.5)
+
+
+def test_controllable_passes_through(client, fake_hs, browser_registry):
+    """An iframe or shadow-DOM player reports playing (from `audible`) but takes
+    no commands. The phone needs to know, so it can use the system media key
+    instead of sending a tab command that silently does nothing."""
+    client.post(
+        "/browser/report",
+        headers=AUTH_HEADERS,
+        json={
+            "browser": "firefox",
+            "tabs": [
+                {"tab_id": 1, "playing": True, "audible": True, "controllable": False},
+                {"tab_id": 2, "playing": True, "audible": True, "controllable": True},
+            ],
+        },
+    )
+    tabs = {t["tab_id"]: t for t in client.get("/status", headers=AUTH_HEADERS).json()["browser_tabs"]}
+    assert tabs[1]["controllable"] is False
+    assert tabs[2]["controllable"] is True

@@ -60,6 +60,8 @@ import { VolumeRail } from './remote/VolumeRail';
 const POLL_MS = 3000;
 // How long an optimistic play/pause icon survives without the server agreeing.
 const OPTIMISTIC_MS = 6000;
+// How long the main transport keeps driving the last tab you acted on.
+const TAB_TARGET_MEMORY_MS = 60000;
 
 function fmtTime(totalSeconds: number): string {
   const sec = Math.max(0, Math.round(totalSeconds));
@@ -94,8 +96,10 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
     Record<string, { playing: boolean; until: number }>
   >({});
   // The tab the user last played or paused, so pausing it does not make the main
-  // transport forget which tab it was driving.
+  // transport forget which tab it was driving. Time-bounded: a tab remembered
+  // forever would permanently keep the media key away from VLC and friends.
   const lastTabTargetKey = useRef<string | null>(null);
+  const lastTabTargetAt = useRef(0);
   const [trackToast, setTrackToast] = useState<string | null>(null);
   const [lockOpen, setLockOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -271,12 +275,21 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   //  - the last-acted-on tab is remembered, because pausing it clears `playing`.
   //    Re-picking the first playing tab each poll silently retargeted the button
   //    at an unrelated tab, so the next press resumed the wrong video.
+  //  - the tab must be one the extension can actually drive. A player in an
+  //    iframe or a closed shadow root reports playing (from `audible`) but takes
+  //    no commands, so targeting it made the button a no-op. The system media key
+  //    reaches those through the browser's own MediaSession, so leave them to it.
+  //    `controllable === undefined` means an older server, so assume yes.
   const browserTabs = status?.browser_tabs ?? [];
+  const drivable = (t: BrowserTab) => t.controllable !== false;
   const nativeNowPlaying = Boolean(status?.now_playing?.title || status?.now_playing?.state);
+  const rememberTabUntil = lastTabTargetAt.current + TAB_TARGET_MEMORY_MS;
   const mainTab = nativeNowPlaying
     ? null
-    : browserTabs.find((t) => t.playing) ??
-      browserTabs.find((t) => tabKey(t) === lastTabTargetKey.current) ??
+    : browserTabs.find((t) => t.playing && drivable(t)) ??
+      (Date.now() < rememberTabUntil
+        ? browserTabs.find((t) => tabKey(t) === lastTabTargetKey.current && drivable(t))
+        : undefined) ??
       null;
   const isPlaying = mainTab
     ? optimisticTabPlaying[tabKey(mainTab)]?.playing ?? mainTab.playing
@@ -316,6 +329,7 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
     const wantPlaying = action === 'play' ? true : action === 'pause' ? false : null;
     if (wantPlaying !== null) {
       lastTabTargetKey.current = key;
+      lastTabTargetAt.current = Date.now();
       setOptimisticTabPlaying((prev) => ({
         ...prev,
         [key]: { playing: wantPlaying, until: Date.now() + OPTIMISTIC_MS },

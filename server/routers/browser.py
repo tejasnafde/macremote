@@ -38,6 +38,9 @@ class TabIn(BaseModel):
     # server, old extension" is a real state and must not fail silently.
     active: bool | None = None  # is the selected tab in its window
     fullscreen: bool | None = None
+    # False when the extension found no media element it can drive, so the phone
+    # must fall back to the system media key instead of a no-op tab command.
+    controllable: bool | None = None
 
 
 class ReportBody(BaseModel):

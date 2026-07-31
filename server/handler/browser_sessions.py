@@ -57,6 +57,7 @@ class BrowserSessionRegistry:
                 # extension build, which is not the same as False.
                 "active": tab.get("active"),
                 "fullscreen": tab.get("fullscreen"),
+                "controllable": tab.get("controllable"),
                 "updated_at": now,
             }
 

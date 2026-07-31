@@ -127,8 +127,6 @@ async function collectAndReport() {
     }
   }
 
-  await setKnownTabs(nextKnown);
-
   // One injection per known media tab gives real element state. `audible` is
   // only a discovery hint, never the answer: it is false for a video with no
   // audio track, for one at volume 0, and during any quiet passage, and the
@@ -137,13 +135,16 @@ async function collectAndReport() {
   // (Note `audible` stays TRUE while a tab is muted, so muting is not the case
   // this fixes.)
   const ids = Object.keys(nextKnown).map(Number);
+  const EMPTY_PROBE = { result: null, frameId: null };
   const probes = await Promise.all(
-    ids.map((id) => (nextKnown[id].discarded ? Promise.resolve(null) : probeTab(id)))
+    ids.map((id) => (nextKnown[id].discarded ? Promise.resolve(EMPTY_PROBE) : probeTab(id)))
   );
 
   const tabs = ids.map((id, i) => {
     const t = nextKnown[id];
-    const p = probes[i];
+    const p = probes[i].result;
+    // Remember which frame owns the player so commands hit exactly that one.
+    nextKnown[id].frameId = probes[i].frameId;
     return {
       tab_id: t.tabId,
       title: t.title,
@@ -154,8 +155,14 @@ async function collectAndReport() {
       volume: p ? p.volume : null,
       active: t.active,
       fullscreen: p ? p.fullscreen : false,
+      // Did we actually find a media element we can drive? When false the phone
+      // must fall back to the system media key, which reaches the page through
+      // the browser's own MediaSession and works on players we cannot touch
+      // (closed shadow DOM, DRM, a frame we are not allowed to inject).
+      controllable: Boolean(p),
     };
   });
+  await setKnownTabs(nextKnown);
 
   try {
     await serverFetch(config, "/browser/report", {
@@ -233,21 +240,33 @@ function mediaOp(op, arg) {
   );
 }
 
-/** Runs mediaOp in a tab. Returns its result, or null if injection failed. */
-async function runMediaOp(tabId, op, arg = null) {
+/**
+ * Runs mediaOp in a tab and returns {result, frameId}, or {result: null} when
+ * nothing usable answered.
+ *
+ * Frames matter: executeScript defaults to the MAIN frame, but plenty of sites
+ * (anime and sports streams especially) put the player in an iframe, so the top
+ * document has no <video> at all. Those tabs reported audible-but-unreadable and
+ * every command silently did nothing.
+ *
+ * `frameId` targets one specific frame when we already know which one owns the
+ * player, so a command cannot act on two elements at once (a page with a real
+ * player in an iframe AND something playable up top would otherwise double-seek).
+ */
+async function runMediaOp(tabId, op, arg = null, frameId = null) {
+  const target = frameId == null ? { tabId, allFrames: true } : { tabId, frameIds: [frameId] };
   try {
-    const results = await api.scripting.executeScript({
-      target: { tabId },
-      args: [op, arg],
-      func: mediaOp,
-    });
-    return results && results[0] ? results[0].result : null;
+    const results = await api.scripting.executeScript({ target, args: [op, arg], func: mediaOp });
+    for (const r of results || []) {
+      if (r && r.result != null) return { result: r.result, frameId: r.frameId ?? null };
+    }
   } catch (err) {
-    return null;
+    // allFrames can fail wholesale on a restricted page; fall through to null.
   }
+  return { result: null, frameId: null };
 }
 
-/** {paused, volume 0-100, fullscreen}, or null when unreadable. */
+/** {paused, volume 0-100, fullscreen} + the frame that owns the player. */
 function probeTab(tabId) {
   return runMediaOp(tabId, "probe");
 }
@@ -287,19 +306,22 @@ async function toggleMute(tabId) {
 async function executeCommand(command) {
   const tabId = command.tab_id;
   const action = command.action;
+  // Reuse the frame the last probe found the player in; null means search all.
+  const known = await getKnownTabs();
+  const frameId = known[tabId] ? known[tabId].frameId ?? null : null;
   if (action === "play" || action === "pause") {
-    await runMediaOp(tabId, action);
+    await runMediaOp(tabId, action, null, frameId);
   } else if (action === "playpause") {
-    await runMediaOp(tabId, "toggle");
+    await runMediaOp(tabId, "toggle", null, frameId);
   } else if (action === "focus") {
     await focusTab(tabId);
   } else if (action === "mute") {
     await toggleMute(tabId);
   } else if (action === "seek") {
     const delta = Number(command.value) || 0;
-    if (delta) await runMediaOp(tabId, "seek", delta);
+    if (delta) await runMediaOp(tabId, "seek", delta, frameId);
   } else if (action === "setvolume") {
-    await runMediaOp(tabId, "setvolume", Math.max(0, Math.min(100, Number(command.value) || 0)));
+    await runMediaOp(tabId, "setvolume", Math.max(0, Math.min(100, Number(command.value) || 0)), frameId);
   } else {
     console.warn("macremote: unknown command action", action);
   }
