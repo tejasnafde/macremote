@@ -1,10 +1,18 @@
 {
   "manifest_version": 3,
   "name": "macremote Browser Bridge",
-  "version": "0.1.0",
+  "version": "0.4.4",
   "description": "Reports audible browser tabs to your local macremote server and lets the phone app play/pause, focus, or mute them.",
-  "permissions": ["tabs", "scripting", "storage", "alarms"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
