@@ -137,7 +137,10 @@ jobs:
 
   notify-failure:
     if: failure()
-    needs: [test, build-apk]
+    # sign-extension included: it failed on every tag since it was added and
+    # alerted nobody, because this job did not depend on it. It exits 0 when the
+    # AMO secrets are absent, so listing it here raises no false alarms.
+    needs: [test, build-apk, sign-extension]
     runs-on: ubuntu-latest
     steps:
       - name: Discord alert

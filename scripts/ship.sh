@@ -29,7 +29,16 @@ if [ -f app/app.json ]; then
     app/app.json > /tmp/app.json.$$ && mv /tmp/app.json.$$ app/app.json
 fi
 
-git add server/VERSION app/app.json 2>/dev/null || git add server/VERSION
+# The extension manifests must move too. AMO rejects a re-upload of a version it
+# already has ("Version 0.1.0 already exists"), so leaving these pinned made the
+# release workflow's sign-extension job fail on every single tag.
+for M in extension/manifest.json extension/manifest.firefox.json; do
+  [ -f "$M" ] || continue
+  jq --arg v "$V" '.version = $v' "$M" > /tmp/manifest.$$ && mv /tmp/manifest.$$ "$M"
+done
+
+git add server/VERSION app/app.json extension/manifest.json extension/manifest.firefox.json 2>/dev/null \
+  || git add server/VERSION
 git commit -m "Release v$V
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
