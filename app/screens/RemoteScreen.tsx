@@ -281,7 +281,10 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   //    reaches those through the browser's own MediaSession, so leave them to it.
   //    `controllable === undefined` means an older server, so assume yes.
   const browserTabs = status?.browser_tabs ?? [];
-  const drivable = (t: BrowserTab) => t.controllable !== false;
+  //    When `controllable` is absent (older extension or server) fall back to
+  //    `volume`, which comes from the same probe: null there means the probe
+  //    found nothing, so the tab takes no commands either.
+  const drivable = (t: BrowserTab) => t.controllable ?? t.volume != null;
   const nativeNowPlaying = Boolean(status?.now_playing?.title || status?.now_playing?.state);
   const rememberTabUntil = lastTabTargetAt.current + TAB_TARGET_MEMORY_MS;
   const mainTab = nativeNowPlaying
