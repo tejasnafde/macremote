@@ -10,7 +10,13 @@ const src = readFileSync(new URL("./background.js", import.meta.url), "utf8");
 const start = src.indexOf("function mediaOp(");
 const end = src.indexOf("\n}", start) + 2;
 assert.ok(start > 0, "mediaOp not found in background.js");
-const mediaOp = new Function(`${src.slice(start, end)}; return mediaOp;`)();
+const body = src.slice(start, end);
+// The slice ends at the first column-0 "}", so a stray unindented brace inside
+// mediaOp would silently truncate what gets tested. Check every op is present.
+for (const op of ["probe", "seek", "setvolume", "toggle"]) {
+  assert.ok(body.includes(`"${op}"`), `extracted mediaOp is missing ${op}`);
+}
+const mediaOp = new Function(`${body}; return mediaOp;`)();
 
 function el(props) {
   return {
@@ -31,7 +37,10 @@ function el(props) {
   };
 }
 
+// mediaOp remembers its last target on `window`, which in the extension is the
+// isolated world's window, one per frame and per extension.
 function withDom(elements, fullscreenElement = null) {
+  globalThis.window = {};
   globalThis.document = {
     fullscreenElement,
     querySelectorAll: () => elements,
@@ -83,8 +92,34 @@ mediaOp("setvolume", 0);
 assert.equal(v.volume, 0);
 assert.equal(v.muted, undefined, "setvolume must not touch muted");
 
+// Live streams report duration Infinity. Filtering on Number.isFinite locked
+// every livestream out of play, pause, seek and volume at once.
+const live = el({ duration: Infinity, paused: false });
+withDom([live]);
+assert.notEqual(mediaOp("probe"), null, "a live stream must be controllable");
+mediaOp("pause");
+assert.equal(live.paused, true);
+
+// Pause then play must return to the SAME element. The target used to be
+// "playing element, else longest", so pausing the short playing clip handed the
+// next play to the long feature video and started the wrong thing.
+const short = el({ duration: 30, paused: false });
+const feature = el({ duration: 600, paused: true });
+withDom([short, feature]);
+mediaOp("pause");
+assert.equal(short.paused, true);
+await mediaOp("play");
+assert.equal(short.played, true, "play must resume the element we paused");
+assert.equal(feature.played, false, "the longer video must not start itself");
+
+// ...but a video the user starts by hand still wins over the remembered one.
+short.paused = true;
+feature.paused = false;
+mediaOp("pause");
+assert.equal(feature.paused, true, "a manually started element takes over");
+
 // A page with no usable media returns null instead of throwing.
-withDom([el({ duration: NaN })]);
+withDom([el({ duration: NaN }), el({ duration: 0 })]);
 assert.equal(mediaOp("probe"), null);
 assert.equal(mediaOp("play"), null);
 

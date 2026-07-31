@@ -93,14 +93,17 @@ async def enqueue_command(tab_id: int, body: CommandBody) -> dict:
     return {"ok": True, "command": command}
 
 
-# Wait for the extension to confirm the tab is active before sending the key.
-# It reports immediately after running a command, so this normally resolves in
-# well under a second; the timeout is the fallback for an extension that is gone.
+# Wait for the extension to confirm the tab went active before sending the key.
+# It reports immediately after running a command, so this normally resolves well
+# inside a second.
 _FULLSCREEN_ACK_TIMEOUT_S = 6.0
 _FULLSCREEN_ACK_POLL_S = 0.2
 
 # Keep strong refs: a bare asyncio.create_task result can be garbage collected.
 _background_tasks: set[asyncio.Task] = set()
+# One waiter per tab. Two quick taps used to start two waiters that both sent
+# "f", which toggles, so the pair cancelled out.
+_fullscreen_pending: set[str] = set()
 
 
 def _spawn(coro) -> None:
@@ -109,25 +112,39 @@ def _spawn(coro) -> None:
     task.add_done_callback(_background_tasks.discard)
 
 
-async def _fullscreen_after_switch(browser: str, tab_id: int) -> None:
-    """Send 'f' once the target tab is really the active one. A real OS keystroke
-    (unlike an injected click) carries the user activation browsers require to
-    enter video fullscreen. Sending it blind raced the tab switch and fullscreened
-    whatever was on screen instead."""
+async def _fullscreen_after_switch(browser: str, tab_id: int, since: float) -> None:
+    """Send 'f' once the target tab reports itself active in a report NEWER than
+    the queued focus command. A real OS keystroke (unlike an injected click)
+    carries the user activation browsers require for video fullscreen.
+
+    `since` is what makes this an ack rather than a guess. Reports are up to 5s
+    apart, so the tab could already be flagged active by a snapshot taken before
+    the command existed; trusting that sent the key while the browser was still
+    showing the previous tab, which is the very race this replaced.
+
+    If no fresh report arrives, send NOTHING. "f" is a real system-wide keystroke,
+    so a blind fallback types the letter into whatever app happens to be focused.
+    """
+    key = f"{browser}:{tab_id}"
     loop = asyncio.get_running_loop()
     deadline = loop.time() + _FULLSCREEN_ACK_TIMEOUT_S
-    while loop.time() < deadline:
-        tab = browser_sessions.registry.get_tab(browser, tab_id)
-        if tab and tab["active"]:
-            # "f" toggles, so pressing it on an already-fullscreen video exits.
-            if tab["fullscreen"]:
-                return
-            break
-        await asyncio.sleep(_FULLSCREEN_ACK_POLL_S)
     try:
-        await asyncio.to_thread(run_hs, lua.key_press("f"))
-    except HSError:
-        pass
+        while loop.time() < deadline:
+            tab = browser_sessions.registry.get_tab(browser, tab_id)
+            if tab and tab["updated_at"] > since:
+                if not tab["active"]:
+                    return  # the switch did not take, so do not aim a key at it
+                # "f" toggles, so pressing it on an already-fullscreen video exits.
+                if tab["fullscreen"]:
+                    return
+                try:
+                    await asyncio.to_thread(run_hs, lua.key_press("f"))
+                except HSError:
+                    pass
+                return
+            await asyncio.sleep(_FULLSCREEN_ACK_POLL_S)
+    finally:
+        _fullscreen_pending.discard(key)
 
 
 @router.post("/tabs/{tab_id}/fullscreen")
@@ -135,12 +152,27 @@ async def fullscreen_tab(tab_id: int, body: BrowserBody) -> dict:
     """Switch to a tab and take its video fullscreen: activate the tab
     (extension), raise the browser (Hammerspoon), then send a real 'f' key once
     the extension confirms the tab is active. Returns immediately."""
+    key = f"{body.browser}:{tab_id}"
+    if key in _fullscreen_pending:
+        return {"ok": True, "note": "fullscreen already pending"}
+
+    # Take the clock reading BEFORE queueing, so only a report that lands after
+    # this point can satisfy the ack.
+    since = browser_sessions.registry.now()
     browser_sessions.registry.enqueue_command(body.browser, tab_id, "focus")
+
     bundle = _BROWSER_BUNDLE.get(body.browser)
     if bundle:
         try:
-            await asyncio.to_thread(run_hs, lua.raise_app_if_running(bundle))
+            # This returns "not-running" when the browser is not up. Believe it:
+            # otherwise the waiter would time out and, previously, still fire a
+            # stray "f" at the frontmost app.
+            raised = await asyncio.to_thread(run_hs, lua.raise_app_if_running(bundle))
+            if (raised or "").strip() == "not-running":
+                return {"ok": False, "note": f"{body.browser} is not running"}
         except HSError:
             pass
-    _spawn(_fullscreen_after_switch(body.browser, tab_id))
+
+    _fullscreen_pending.add(key)
+    _spawn(_fullscreen_after_switch(body.browser, tab_id, since))
     return {"ok": True, "note": "fullscreen requested"}

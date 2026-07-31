@@ -93,6 +93,9 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   const [optimisticTabPlaying, setOptimisticTabPlaying] = useState<
     Record<string, { playing: boolean; until: number }>
   >({});
+  // The tab the user last played or paused, so pausing it does not make the main
+  // transport forget which tab it was driving.
+  const lastTabTargetKey = useRef<string | null>(null);
   const [trackToast, setTrackToast] = useState<string | null>(null);
   const [lockOpen, setLockOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -128,6 +131,10 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
       const npPlaying = s.now_playing?.state ? s.now_playing.state.toLowerCase().includes('play') : null;
       setOptimisticPlaying((prev) => {
         if (prev === null) return null;
+        // Hammerspoon only tracks Spotify and Music. For anything else there is
+        // no truth to reconcile against, so our own guess is the best state we
+        // have - expiring it flipped the icon back while audio kept playing.
+        if (npPlaying === null) return prev;
         if (npPlaying === prev) return null;
         return now > optimisticPlayingUntil.current ? null : prev;
       });
@@ -135,7 +142,11 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
         const next: typeof prev = {};
         for (const [key, entry] of Object.entries(prev)) {
           const tab = s.browser_tabs?.find((t) => tabKey(t) === key);
-          if (!tab || tab.playing === entry.playing || now > entry.until) continue;
+          // A tab missing from this report is not disagreement, it is silence:
+          // the server drops a browser's whole list 15s after its last report, so
+          // two dropped reports would otherwise discard the user's intent.
+          if (tab && tab.playing === entry.playing) continue;
+          if (now > entry.until) continue;
           next[key] = entry;
         }
         return next;
@@ -252,10 +263,21 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   // directly instead of firing a system media key at whatever owns now-playing:
   // that key and the tab buttons used to hit the same video down two paths, and
   // neither knew what the other had done, so the two icons drifted apart.
+  //
+  // Two rules keep this honest:
+  //  - the tab must be PLAYING, or be the one we last acted on. Falling back to
+  //    "any known tab" hijacked the button: one paused tab left open is enough to
+  //    stop the media key from ever reaching VLC or IINA again.
+  //  - the last-acted-on tab is remembered, because pausing it clears `playing`.
+  //    Re-picking the first playing tab each poll silently retargeted the button
+  //    at an unrelated tab, so the next press resumed the wrong video.
   const browserTabs = status?.browser_tabs ?? [];
-  const mainTab = status?.now_playing?.title
+  const nativeNowPlaying = Boolean(status?.now_playing?.title || status?.now_playing?.state);
+  const mainTab = nativeNowPlaying
     ? null
-    : browserTabs.find((t) => t.playing) ?? browserTabs[0] ?? null;
+    : browserTabs.find((t) => t.playing) ??
+      browserTabs.find((t) => tabKey(t) === lastTabTargetKey.current) ??
+      null;
   const isPlaying = mainTab
     ? optimisticTabPlaying[tabKey(mainTab)]?.playing ?? mainTab.playing
     : optimisticPlaying ?? serverIsPlaying;
@@ -293,6 +315,7 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
     const key = tabKey(tab);
     const wantPlaying = action === 'play' ? true : action === 'pause' ? false : null;
     if (wantPlaying !== null) {
+      lastTabTargetKey.current = key;
       setOptimisticTabPlaying((prev) => ({
         ...prev,
         [key]: { playing: wantPlaying, until: Date.now() + OPTIMISTIC_MS },
@@ -301,6 +324,17 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
     try {
       await api.tabCommand(tab.tab_id, tab.browser, action);
     } catch (err) {
+      // The APK self-updates but the Mac server is updated by hand, so a new app
+      // against an old server is normal. Older servers reject play/pause with
+      // 422; the toggle they do accept gets the same result from this state.
+      if (wantPlaying !== null && err instanceof ApiError && err.status === 422) {
+        try {
+          await api.tabCommand(tab.tab_id, tab.browser, 'playpause');
+          return;
+        } catch {
+          // fall through to the normal error path
+        }
+      }
       if (wantPlaying !== null) {
         setOptimisticTabPlaying((prev) => {
           const next = { ...prev };

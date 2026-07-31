@@ -12,8 +12,9 @@ What it does, every few seconds:
   controllable instead of vanishing from the phone).
 - Reads each of those tabs for real state: is the media element paused, its
   volume, and whether the page is fullscreen. `audible` is only a discovery
-  hint. A muted or silent video is still playing, so deriving "playing" from
-  sound inverted the phone's play/pause icon.
+  hint, never the answer: it is false for a video with no audio track, one at
+  volume 0, and any quiet passage. Deriving "playing" from sound drew Play over
+  a playing video, and the button then paused it.
 - Reports that list to `POST /browser/report` on your macremote server.
 - Polls `GET /browser/commands` for play/pause/focus/mute/seek/setvolume
   commands queued by the app and carries them out, then reports again

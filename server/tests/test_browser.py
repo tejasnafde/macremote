@@ -237,41 +237,86 @@ def test_fullscreen_tab_enqueues_focus_and_raises(client, fake_hs, browser_regis
     assert not any("launchOrFocusByBundleID" in c for c in fake_hs.calls)
 
 
-def test_fullscreen_skips_key_when_already_fullscreen(client, fake_hs, browser_registry):
-    """'f' toggles, so pressing it on an already-fullscreen video would exit."""
+def _sent_f(fake_hs) -> bool:
+    return any("keyStroke" in c and '"f"' in c for c in fake_hs.calls)
+
+
+def _wait_for_f(fake_hs, timeout=3.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _sent_f(fake_hs):
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _ack(client, browser_registry, **tab):
+    """Simulate the extension acting on the focus command and reporting back:
+    the report must be NEWER than the command for the ack to count."""
+    browser_registry.clock.tick(1)
     client.post(
         "/browser/report",
         headers=AUTH_HEADERS,
-        json={
-            "browser": "firefox",
-            "tabs": [{"tab_id": 7, "playing": True, "active": True, "fullscreen": True}],
-        },
+        json={"browser": "firefox", "tabs": [{"tab_id": 7, "playing": True, **tab}]},
     )
-    assert client.post(
-        "/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"}
-    ).status_code == 200
-    time.sleep(0.5)
-    assert not any("keyStroke" in c and '"f"' in c for c in fake_hs.calls)
 
 
 def test_fullscreen_sends_key_once_tab_reports_active(client, fake_hs, browser_registry):
+    assert client.post(
+        "/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"}
+    ).status_code == 200
+    _ack(client, browser_registry, active=True, fullscreen=False)
+    assert _wait_for_f(fake_hs), f"no 'f' keystroke; calls={fake_hs.calls}"
+
+
+def test_fullscreen_skips_key_when_already_fullscreen(client, fake_hs, browser_registry):
+    """'f' toggles, so pressing it on an already-fullscreen video would exit."""
+    assert client.post(
+        "/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"}
+    ).status_code == 200
+    _ack(client, browser_registry, active=True, fullscreen=True)
+    assert not _wait_for_f(fake_hs, timeout=1.0)
+
+
+def test_fullscreen_ignores_a_report_older_than_the_command(client, fake_hs, browser_registry):
+    """The race this ack exists to close: the tab was active up to 5s ago, the
+    user has since switched tabs, and the extension has not run the focus command
+    yet. Trusting that snapshot aimed 'f' at whatever tab is on screen now."""
     client.post(
         "/browser/report",
         headers=AUTH_HEADERS,
-        json={
-            "browser": "firefox",
-            "tabs": [{"tab_id": 7, "playing": True, "active": True, "fullscreen": False}],
-        },
+        json={"browser": "firefox", "tabs": [{"tab_id": 7, "active": True, "fullscreen": False}]},
     )
     assert client.post(
         "/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"}
     ).status_code == 200
-    deadline = time.monotonic() + 3
-    while time.monotonic() < deadline:
-        if any("keyStroke" in c and '"f"' in c for c in fake_hs.calls):
-            return
-        time.sleep(0.05)
-    raise AssertionError(f"no 'f' keystroke; calls={fake_hs.calls}")
+    assert not _wait_for_f(fake_hs, timeout=1.0)
+
+
+def test_fullscreen_sends_no_key_when_the_switch_is_never_confirmed(client, fake_hs, browser_registry):
+    """No ack means no keystroke. 'f' is a real system-wide key, so a blind
+    fallback types the letter into whatever app happens to be focused."""
+    assert client.post(
+        "/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"}
+    ).status_code == 200
+    assert not _wait_for_f(fake_hs, timeout=1.0)
+
+
+def test_fullscreen_gives_up_when_the_browser_is_not_running(client, fake_hs, browser_registry):
+    fake_hs.set_output("not-running")
+    resp = client.post("/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is False
+    assert not _wait_for_f(fake_hs, timeout=0.5)
+
+
+def test_fullscreen_second_tap_does_not_double_toggle(client, fake_hs, browser_registry):
+    for _ in range(2):
+        client.post("/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"})
+    _ack(client, browser_registry, active=True, fullscreen=False)
+    assert _wait_for_f(fake_hs)
+    time.sleep(0.4)
+    assert sum(1 for c in fake_hs.calls if "keyStroke" in c and '"f"' in c) == 1
 
 
 def test_fullscreen_tab_requires_auth(client, fake_hs):

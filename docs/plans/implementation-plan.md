@@ -488,3 +488,54 @@ or `app.json` change, no new dependencies.
   create the API key/secret at addons.mozilla.org/developers (free) and add
   them as repo secrets. Then the signed .xpi installs permanently (no
   about:debugging reload). TODO: update_url + updates.json for auto-update.
+
+## v0.4.3 browser tab media UX fixes (2026-08-01)
+Audit found the phone's play/pause icons could invert against reality and stay
+inverted. Root cause: the extension derived `playing` from
+`tabs.query({audible:true})`, which is false for a video with no audio track, one
+at volume 0, and any quiet passage, while the command path read the real DOM
+`paused` flag. The icon said Play and the button paused. (`audible` stays true
+while a tab is muted, so muting was not the trigger.)
+- Extension: one injected `mediaOp` function for the probe and every command, so
+  they cannot target different elements (playpause was the only one missing the
+  finite-duration filter, so on YouTube it hit ad/preview `<video>` elements).
+  Absolute play/pause added; reports fire immediately after a command.
+  `extension/mediaOp.test.mjs` covers the element pick and clamping.
+- Server: `/status` carries `muted` + `fullscreen` (muted was stored then
+  dropped). Fullscreen waits for the extension to confirm the tab is active
+  instead of a blind 2.4s sleep, and skips the key when already fullscreen since
+  'f' toggles. `raise_app_if_running` replaces `focus_app` for the bridge, which
+  would have LAUNCHED Chrome on a Firefox-only Mac. Queued commands expire (10s).
+- App: with no native now-playing the main play/pause and seek buttons drive the
+  browser tab directly, instead of firing a system media key down a second path
+  that the tab buttons knew nothing about. Optimistic icons clear on agreement or
+  after 6s, and are keyed browser:tab_id.
+
+Second pass, from an adversarial review of the first (all found real, all fixed):
+- The duration filter used `Number.isFinite`, which locked out every LIVE stream
+  (`duration === Infinity`). The predicate is now just `duration > 0`: NaN and 0
+  are still rejected, Infinity is kept.
+- `mediaOp` remembered nothing, so its target moved when playback stopped: pause
+  hit the playing short clip, then play picked the longest element and started a
+  different video. It now prefers playing, then last-acted-on, then longest.
+- Reports could overlap, and `/browser/report` replaces the whole list, so a slow
+  pre-command report could land after the post-command one and restore stale
+  state. Reports are serialized on one promise chain.
+- COMMAND_TTL_SECONDS was 10s but the idle poll interval is 15s, so every tap in
+  idle cadence expired before the extension could fetch it. Now 90s, plus a
+  queue cap for a browser that never polls again.
+- The fullscreen ack trusted any `active:true`, including a snapshot taken up to
+  5s BEFORE the command, which re-created the race it was meant to close. It now
+  requires a report newer than the command, and on no ack sends NOTHING: 'f' is a
+  real system-wide keystroke, so the old blind fallback typed the letter into
+  whatever app was focused. Also honours the "not-running" signal, and dedupes
+  concurrent taps that would toggle fullscreen on then straight back off.
+- App: the main transport fell back to `browserTabs[0]`, so one paused tab left
+  open permanently hijacked the media key away from VLC/IINA. It now targets only
+  a playing tab or the one the user last acted on, and otherwise leaves the
+  system media key alone.
+- App: `play`/`pause` 422 against a server older than this change (the APK
+  self-updates, the Mac server does not), so it retries once as `playpause`.
+- App: an optimistic icon no longer expires when there is no truth source to
+  reconcile against, and a tab briefly missing from a report no longer counts as
+  disagreement.

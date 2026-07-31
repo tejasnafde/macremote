@@ -17,13 +17,25 @@ import time
 
 class BrowserSessionRegistry:
     SESSION_TTL_SECONDS = 15
-    COMMAND_TTL_SECONDS = 10
+    # Must stay comfortably ABOVE the extension's slowest poll interval (15s
+    # idle, and Chrome can clamp alarms to 60s for a packed build): a TTL under
+    # that silently ate every tap, since each command expired before the
+    # extension could fetch it. Replay is also much less harmful now that
+    # play/pause are absolute rather than toggles - a repeated pause is a no-op.
+    COMMAND_TTL_SECONDS = 90
+    # Backstop for a browser that never polls again: without a drain nothing
+    # else purges the queue.
+    MAX_QUEUED_COMMANDS = 32
 
     def __init__(self, clock=time.monotonic):
         self._clock = clock
         self._sessions: dict[str, dict] = {}  # key: "{browser}:{tab_id}"
         self._commands: dict[str, list[dict]] = {}  # browser -> queued commands
         self._next_command_id = 1
+
+    def now(self) -> float:
+        """The registry's clock, so callers can compare against `updated_at`."""
+        return self._clock()
 
     def report(self, browser: str, tabs: list[dict]) -> None:
         """Replace `browser`'s sessions wholesale (idempotent, no diffing)."""
@@ -66,17 +78,20 @@ class BrowserSessionRegistry:
         ]
 
     def get_tab(self, browser: str, tab_id: int) -> dict | None:
-        """One live tab, or None when unknown or stale."""
+        """One live tab, or None when unknown or stale. Keeps `updated_at` so a
+        caller can tell a fresh report from a snapshot taken before its command."""
         self._purge_expired()
         session = self._sessions.get(f"{browser}:{tab_id}")
-        return {k: v for k, v in session.items() if k != "updated_at"} if session else None
+        return dict(session) if session else None
 
     def enqueue_command(self, browser: str, tab_id: int, action: str, value: int | None = None) -> dict:
         command = {"id": self._next_command_id, "tab_id": tab_id, "action": action}
         if value is not None:
             command["value"] = value  # e.g. seek delta in seconds
         self._next_command_id += 1
-        self._commands.setdefault(browser, []).append({**command, "at": self._clock()})
+        queue = self._commands.setdefault(browser, [])
+        queue.append({**command, "at": self._clock()})
+        del queue[: -self.MAX_QUEUED_COMMANDS]
         return command
 
     def drain_commands(self, browser: str) -> list[dict]:

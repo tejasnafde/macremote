@@ -65,7 +65,7 @@ function serverFetch(config, path, options) {
   });
 }
 
-function tabEntry(tab, lastSeenAt) {
+function tabEntry(tab) {
   return {
     tabId: tab.id,
     title: tab.title || "",
@@ -74,8 +74,18 @@ function tabEntry(tab, lastSeenAt) {
     muted: Boolean(tab.mutedInfo && tab.mutedInfo.muted),
     active: Boolean(tab.active),
     discarded: Boolean(tab.discarded),
-    lastSeenAt,
   };
+}
+
+// Reports must not overlap. /browser/report replaces a browser's whole tab list,
+// and probing is slow (one injection per tab), so a report that started before a
+// command could land after the one that started after it and put the pre-command
+// state back. Serializing keeps the last POST the newest snapshot.
+let reportChain = Promise.resolve(0);
+
+function queueReport() {
+  reportChain = reportChain.then(collectAndReport, collectAndReport);
+  return reportChain;
 }
 
 /**
@@ -87,7 +97,6 @@ async function collectAndReport() {
   const config = await getConfig();
   if (!config.serverUrl || !config.token) return 0;
 
-  const now = Date.now();
   const known = await getKnownTabs();
 
   let audibleTabs = [];
@@ -100,7 +109,7 @@ async function collectAndReport() {
   const nextKnown = {};
 
   for (const tab of audibleTabs) {
-    nextKnown[tab.id] = tabEntry(tab, now);
+    nextKnown[tab.id] = tabEntry(tab);
   }
 
   // Carry over any tab we have seen play, for as long as it stays OPEN (not on
@@ -112,7 +121,7 @@ async function collectAndReport() {
     if (nextKnown[tabIdKey]) continue;
     try {
       const tab = await api.tabs.get(Number(tabIdKey));
-      nextKnown[tabIdKey] = tabEntry(tab, known[tabIdKey].lastSeenAt || now);
+      nextKnown[tabIdKey] = tabEntry(tab);
     } catch (err) {
       // Tab was closed - let it drop out of the known set.
     }
@@ -121,8 +130,12 @@ async function collectAndReport() {
   await setKnownTabs(nextKnown);
 
   // One injection per known media tab gives real element state. `audible` is
-  // only a discovery hint: a muted or silent video is still playing, and
-  // inferring `playing` from it inverted the phone's play/pause icon.
+  // only a discovery hint, never the answer: it is false for a video with no
+  // audio track, for one at volume 0, and during any quiet passage, and the
+  // carry-over branch above forced playing:false for every non-audible tab.
+  // The phone then drew Play over a playing video, and the button paused it.
+  // (Note `audible` stays TRUE while a tab is muted, so muting is not the case
+  // this fixes.)
   const ids = Object.keys(nextKnown).map(Number);
   const probes = await Promise.all(
     ids.map((id) => (nextKnown[id].discarded ? Promise.resolve(null) : probeTab(id)))
@@ -163,16 +176,26 @@ async function collectAndReport() {
  * player - seek used to filter by duration while playpause picked by area, and
  * the two then acted on different elements.
  *
- * Only real seekable media counts: YouTube keeps extra <video> elements (ads,
- * previews) with a NaN duration, and picking one made commands silent no-ops.
+ * `duration > 0` is the whole filter, and the > is doing real work: it drops the
+ * NaN-duration <video> elements YouTube keeps for ads and previews (picking one
+ * made commands silent no-ops) and the 0-duration ones with no media loaded,
+ * while KEEPING Infinity, which is what a live stream reports. Testing
+ * Number.isFinite here instead locked out every livestream.
  * Returns null when the page has no such element.
  */
 function mediaOp(op, arg) {
-  const media = Array.from(document.querySelectorAll("video, audio")).filter(
-    (el) => Number.isFinite(el.duration) && el.duration > 0
-  );
+  const media = Array.from(document.querySelectorAll("video, audio")).filter((el) => el.duration > 0);
   if (media.length === 0) return null;
-  const el = media.find((m) => !m.paused) || media.reduce((a, b) => (b.duration > a.duration ? b : a));
+  // Prefer what is playing, then whatever we acted on last, then the longest.
+  // Without the middle term the target moves the moment playback stops: pause
+  // picked the playing short clip, then play picked the longest element instead
+  // and started a different video.
+  const last = window.__macremoteLastMedia;
+  const el =
+    media.find((m) => !m.paused) ||
+    (media.includes(last) ? last : null) ||
+    media.reduce((a, b) => (b.duration > a.duration ? b : a));
+  window.__macremoteLastMedia = el;
 
   if (op === "probe") {
     return {
@@ -299,7 +322,7 @@ async function pollCommands() {
     // Report straight away instead of waiting out the 5s interval: the phone
     // drew an optimistic icon on tap and needs real state to confirm it, and
     // the fullscreen flow waits on this report to know the tab switched.
-    if (commands.length > 0) await collectAndReport();
+    if (commands.length > 0) await queueReport();
   } catch (err) {
     console.error("macremote: /browser/commands poll failed", err);
   }
@@ -310,7 +333,7 @@ function scheduleAlarm(name, seconds) {
 }
 
 async function handleReportAlarm() {
-  const tabCount = await collectAndReport();
+  const tabCount = await queueReport();
   scheduleAlarm(REPORT_ALARM, REPORT_INTERVAL_SECONDS);
   scheduleAlarm(POLL_ALARM, tabCount > 0 ? POLL_INTERVAL_ACTIVE_SECONDS : POLL_INTERVAL_IDLE_SECONDS);
 }
