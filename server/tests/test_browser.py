@@ -1,4 +1,27 @@
+import time
+
 from tests.conftest import AUTH_HEADERS
+
+
+def test_stale_commands_are_dropped_on_drain(client, fake_hs, browser_registry):
+    """A browser that was closed must not replay a burst of stale toggles when
+    it reconnects: four queued playpause presses net out to nothing useful."""
+    for _ in range(4):
+        client.post(
+            "/browser/tabs/1/command", headers=AUTH_HEADERS, json={"action": "pause", "browser": "chrome"}
+        )
+    browser_registry.clock.tick(browser_registry.COMMAND_TTL_SECONDS + 1)
+    cmds = client.get("/browser/commands?browser=chrome", headers=AUTH_HEADERS).json()["commands"]
+    assert cmds == []
+
+
+def test_fresh_commands_survive_drain(client, fake_hs, browser_registry):
+    client.post(
+        "/browser/tabs/1/command", headers=AUTH_HEADERS, json={"action": "play", "browser": "chrome"}
+    )
+    cmds = client.get("/browser/commands?browser=chrome", headers=AUTH_HEADERS).json()["commands"]
+    assert [c["action"] for c in cmds] == ["play"]
+    assert "at" not in cmds[0]
 
 
 def test_report_requires_auth(client):
@@ -36,9 +59,29 @@ def test_report_and_status_shape(client, fake_hs, browser_registry):
     status_resp = client.get("/status", headers=AUTH_HEADERS)
     assert status_resp.status_code == 200
     assert status_resp.json()["browser_tabs"] == [
-        {"tab_id": 1, "browser": "chrome", "title": "Song A", "playing": True, "audible": True, "volume": None},
-        {"tab_id": 2, "browser": "chrome", "title": "Song B", "playing": False, "audible": False, "volume": None},
+        {
+            "tab_id": 1, "browser": "chrome", "title": "Song A",
+            "playing": True, "audible": True, "muted": False, "volume": None, "fullscreen": False,
+        },
+        {
+            "tab_id": 2, "browser": "chrome", "title": "Song B",
+            "playing": False, "audible": False, "muted": True, "volume": None, "fullscreen": False,
+        },
     ]
+
+
+def test_playing_is_independent_of_audible(client, fake_hs, browser_registry):
+    """A muted tab can still be playing. Inferring `playing` from `audible`
+    inverted the phone's icon, which then paused a video labelled 'Play'."""
+    body = {
+        "browser": "chrome",
+        "tabs": [{"tab_id": 1, "audible": False, "muted": True, "playing": True}],
+    }
+    assert client.post("/browser/report", headers=AUTH_HEADERS, json=body).status_code == 200
+    tab = client.get("/status", headers=AUTH_HEADERS).json()["browser_tabs"][0]
+    assert tab["playing"] is True
+    assert tab["audible"] is False
+    assert tab["muted"] is True
 
 
 def test_status_browser_tabs_empty_by_default(client, fake_hs, browser_registry):
@@ -189,8 +232,46 @@ def test_fullscreen_tab_enqueues_focus_and_raises(client, fake_hs, browser_regis
     # It queues a focus command for the extension...
     cmds = client.get("/browser/commands?browser=firefox", headers=AUTH_HEADERS).json()["commands"]
     assert any(c["tab_id"] == 7 and c["action"] == "focus" for c in cmds)
-    # ...and raises the browser app on the Mac.
-    assert any("launchOrFocusByBundleID" in c and "firefox" in c for c in fake_hs.calls)
+    # ...and raises the browser app on the Mac, without launching it.
+    assert any("hs.application.get" in c and "firefox" in c for c in fake_hs.calls)
+    assert not any("launchOrFocusByBundleID" in c for c in fake_hs.calls)
+
+
+def test_fullscreen_skips_key_when_already_fullscreen(client, fake_hs, browser_registry):
+    """'f' toggles, so pressing it on an already-fullscreen video would exit."""
+    client.post(
+        "/browser/report",
+        headers=AUTH_HEADERS,
+        json={
+            "browser": "firefox",
+            "tabs": [{"tab_id": 7, "playing": True, "active": True, "fullscreen": True}],
+        },
+    )
+    assert client.post(
+        "/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"}
+    ).status_code == 200
+    time.sleep(0.5)
+    assert not any("keyStroke" in c and '"f"' in c for c in fake_hs.calls)
+
+
+def test_fullscreen_sends_key_once_tab_reports_active(client, fake_hs, browser_registry):
+    client.post(
+        "/browser/report",
+        headers=AUTH_HEADERS,
+        json={
+            "browser": "firefox",
+            "tabs": [{"tab_id": 7, "playing": True, "active": True, "fullscreen": False}],
+        },
+    )
+    assert client.post(
+        "/browser/tabs/7/fullscreen", headers=AUTH_HEADERS, json={"browser": "firefox"}
+    ).status_code == 200
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        if any("keyStroke" in c and '"f"' in c for c in fake_hs.calls):
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"no 'f' keystroke; calls={fake_hs.calls}")
 
 
 def test_fullscreen_tab_requires_auth(client, fake_hs):

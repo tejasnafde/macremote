@@ -19,7 +19,10 @@ router = APIRouter(
 )
 
 BrowserName = Literal["firefox", "chrome"]
-CommandAction = Literal["playpause", "focus", "mute", "seek", "setvolume"]
+# play/pause are absolute; playpause is the legacy toggle, kept so an older app
+# build keeps working. Prefer the absolute pair: a toggle resolved seconds after
+# the tap cannot be reconciled with the icon the phone already drew.
+CommandAction = Literal["play", "pause", "playpause", "focus", "mute", "seek", "setvolume"]
 
 
 class TabIn(BaseModel):
@@ -30,6 +33,8 @@ class TabIn(BaseModel):
     muted: bool = False
     playing: bool = False
     volume: int | None = None  # media element volume 0-100, when readable
+    active: bool = False  # is the selected tab in its window
+    fullscreen: bool = False
 
 
 class ReportBody(BaseModel):
@@ -82,23 +87,43 @@ async def enqueue_command(tab_id: int, body: CommandBody) -> dict:
         bundle = _BROWSER_BUNDLE.get(body.browser)
         if bundle:
             try:
-                await asyncio.to_thread(run_hs, lua.focus_app(bundle))
+                await asyncio.to_thread(run_hs, lua.raise_app_if_running(bundle))
             except HSError:
                 pass
     return {"ok": True, "command": command}
 
 
-# How long to wait after focusing a tab before sending the fullscreen key: the
-# extension activates the tab on its command poll (up to ~2s), and only then is
-# the right video frontmost to receive the keystroke.
-_FULLSCREEN_KEY_DELAY_S = 2.4
+# Wait for the extension to confirm the tab is active before sending the key.
+# It reports immediately after running a command, so this normally resolves in
+# well under a second; the timeout is the fallback for an extension that is gone.
+_FULLSCREEN_ACK_TIMEOUT_S = 6.0
+_FULLSCREEN_ACK_POLL_S = 0.2
+
+# Keep strong refs: a bare asyncio.create_task result can be garbage collected.
+_background_tasks: set[asyncio.Task] = set()
 
 
-async def _delayed_fullscreen_key() -> None:
-    # A real OS keystroke (unlike an injected click) carries the user activation
-    # browsers require to enter video fullscreen. "f" is the fullscreen shortcut
-    # on YouTube and most players; on sites that do not map it this is a no-op.
-    await asyncio.sleep(_FULLSCREEN_KEY_DELAY_S)
+def _spawn(coro) -> None:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+async def _fullscreen_after_switch(browser: str, tab_id: int) -> None:
+    """Send 'f' once the target tab is really the active one. A real OS keystroke
+    (unlike an injected click) carries the user activation browsers require to
+    enter video fullscreen. Sending it blind raced the tab switch and fullscreened
+    whatever was on screen instead."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _FULLSCREEN_ACK_TIMEOUT_S
+    while loop.time() < deadline:
+        tab = browser_sessions.registry.get_tab(browser, tab_id)
+        if tab and tab["active"]:
+            # "f" toggles, so pressing it on an already-fullscreen video exits.
+            if tab["fullscreen"]:
+                return
+            break
+        await asyncio.sleep(_FULLSCREEN_ACK_POLL_S)
     try:
         await asyncio.to_thread(run_hs, lua.key_press("f"))
     except HSError:
@@ -109,13 +134,13 @@ async def _delayed_fullscreen_key() -> None:
 async def fullscreen_tab(tab_id: int, body: BrowserBody) -> dict:
     """Switch to a tab and take its video fullscreen: activate the tab
     (extension), raise the browser (Hammerspoon), then send a real 'f' key once
-    it is frontmost. Returns immediately; the key fires on a short delay."""
+    the extension confirms the tab is active. Returns immediately."""
     browser_sessions.registry.enqueue_command(body.browser, tab_id, "focus")
     bundle = _BROWSER_BUNDLE.get(body.browser)
     if bundle:
         try:
-            await asyncio.to_thread(run_hs, lua.focus_app(bundle))
+            await asyncio.to_thread(run_hs, lua.raise_app_if_running(bundle))
         except HSError:
             pass
-    asyncio.create_task(_delayed_fullscreen_key())
+    _spawn(_fullscreen_after_switch(body.browser, tab_id))
     return {"ok": True, "note": "fullscreen requested"}

@@ -1,5 +1,12 @@
 # macremote
 
+Shared cross-project conventions (GCP accounts and the --configuration=personal
+rule, OAuth consent branding, Secret Manager inventory, writing style) live in
+`~/Desktop/projects/CLAUDE.local.md`. Read it before touching gcloud, OAuth, or
+secrets.
+
+@/Users/tejas/Desktop/projects/CLAUDE.local.md
+
 Self-hosted remote control for your Mac from your Android phone. FastAPI server
 on the Mac drives Hammerspoon (media keys, volume, brightness, lock, sleep,
 sleep timer); an Expo/React Native app + home-screen widget is the client.

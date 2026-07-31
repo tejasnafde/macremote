@@ -6,15 +6,18 @@ diff). Sessions are considered stale 15s after their last report and are
 lazily purged whenever the registry is read - this covers a closed browser or
 a crashed extension without needing a background sweep task.
 
-Commands (playpause/focus/mute, enqueued by the app via
-POST /browser/tabs/{tab_id}/command) sit in a small per-browser queue that
-the extension drains on its own poll loop (GET /browser/commands)."""
+Commands (play/pause/playpause/focus/mute/seek/setvolume, enqueued by the app
+via POST /browser/tabs/{tab_id}/command) sit in a small per-browser queue that
+the extension drains on its own poll loop (GET /browser/commands). Queued
+commands expire: a browser that was closed for a minute must not replay a
+burst of stale toggles the moment it reconnects."""
 
 import time
 
 
 class BrowserSessionRegistry:
     SESSION_TTL_SECONDS = 15
+    COMMAND_TTL_SECONDS = 10
 
     def __init__(self, clock=time.monotonic):
         self._clock = clock
@@ -38,6 +41,8 @@ class BrowserSessionRegistry:
                 "muted": bool(tab.get("muted", False)),
                 "playing": bool(tab.get("playing", False)),
                 "volume": tab.get("volume"),  # 0-100 or None when unreadable
+                "active": bool(tab.get("active", False)),
+                "fullscreen": bool(tab.get("fullscreen", False)),
                 "updated_at": now,
             }
 
@@ -60,19 +65,30 @@ class BrowserSessionRegistry:
             for session in self._sessions.values()
         ]
 
+    def get_tab(self, browser: str, tab_id: int) -> dict | None:
+        """One live tab, or None when unknown or stale."""
+        self._purge_expired()
+        session = self._sessions.get(f"{browser}:{tab_id}")
+        return {k: v for k, v in session.items() if k != "updated_at"} if session else None
+
     def enqueue_command(self, browser: str, tab_id: int, action: str, value: int | None = None) -> dict:
         command = {"id": self._next_command_id, "tab_id": tab_id, "action": action}
         if value is not None:
             command["value"] = value  # e.g. seek delta in seconds
         self._next_command_id += 1
-        self._commands.setdefault(browser, []).append(command)
+        self._commands.setdefault(browser, []).append({**command, "at": self._clock()})
         return command
 
     def drain_commands(self, browser: str) -> list[dict]:
-        """Return and clear `browser`'s queued commands."""
-        commands = self._commands.get(browser, [])
+        """Return and clear `browser`'s queued commands, dropping expired ones."""
+        now = self._clock()
+        queued = self._commands.get(browser, [])
         self._commands[browser] = []
-        return commands
+        return [
+            {k: v for k, v in c.items() if k != "at"}
+            for c in queued
+            if now - c["at"] <= self.COMMAND_TTL_SECONDS
+        ]
 
 
 registry = BrowserSessionRegistry()

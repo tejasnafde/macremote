@@ -34,7 +34,9 @@ async def get_status() -> dict:
             "title": tab["title"],
             "playing": tab["playing"],
             "audible": tab["audible"],
+            "muted": tab["muted"],
             "volume": tab.get("volume"),
+            "fullscreen": tab.get("fullscreen", False),
         }
         for tab in browser_sessions.registry.list_tabs()
     ]

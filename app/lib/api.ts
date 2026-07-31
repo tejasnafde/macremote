@@ -40,11 +40,20 @@ export interface BrowserTab {
   title: string;
   playing: boolean;
   audible: boolean;
+  /** Absent on servers older than the muted fix. */
+  muted?: boolean;
   /** Media volume 0-100 when the extension reports it; absent/null on older servers. */
   volume?: number | null;
+  fullscreen?: boolean;
 }
 
-export type BrowserTabAction = 'playpause' | 'focus' | 'mute' | 'seek' | 'setvolume';
+/** Stable key for a tab: ids are per-browser and collide across browsers. */
+export function tabKey(tab: BrowserTab): string {
+  return `${tab.browser}:${tab.tab_id}`;
+}
+
+/** Prefer absolute 'play'/'pause' over the 'playpause' toggle. */
+export type BrowserTabAction = 'play' | 'pause' | 'playpause' | 'focus' | 'mute' | 'seek' | 'setvolume';
 
 export interface StatusResponse {
   now_playing: NowPlaying | null;

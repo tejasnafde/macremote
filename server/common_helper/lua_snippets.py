@@ -181,6 +181,19 @@ def focus_app(bundle_id: str) -> str:
     return f'hs.application.launchOrFocusByBundleID("{safe}")'
 
 
+# Raise an app ONLY if it is already running. The browser bridge needs this
+# instead of focus_app: the browser name is inferred from the extension, so
+# focusing a bundle id that is not running would LAUNCH Chrome on a Mac whose
+# tabs are all in Firefox. Same hs.application.get gate as media_seek.
+def raise_app_if_running(bundle_id: str) -> str:
+    safe = bundle_id.replace('"', '')
+    return (
+        f'local a = hs.application.get("{safe}"); '
+        'if not a then return "not-running" end; '
+        'a:activate(true); return "ok"'
+    )
+
+
 # ── Window-grouped switcher ──────────────────────────────────────────────────
 # List standard windows as JSON [{id, app, bundle_id, title, screen, screen_id,
 # active}]. isStandard() filters palettes/panels/hidden scratch windows; the

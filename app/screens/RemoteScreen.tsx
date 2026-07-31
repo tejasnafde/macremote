@@ -43,7 +43,7 @@ import {
   IconWifiOff,
   IconX,
 } from '../components/icons';
-import { api, ApiError, BrowserTab, BrowserTabAction, Display, StatusResponse } from '../lib/api';
+import { api, ApiError, BrowserTab, BrowserTabAction, Display, StatusResponse, tabKey } from '../lib/api';
 import { checkForUpdate, currentVersion, downloadAndInstall } from '../lib/apk';
 import { getActiveDevice } from '../lib/devices';
 import { getBrightnessTarget, setBrightnessTarget } from '../lib/displayTarget';
@@ -58,6 +58,8 @@ import { SleepSheet } from './remote/SleepSheet';
 import { VolumeRail } from './remote/VolumeRail';
 
 const POLL_MS = 3000;
+// How long an optimistic play/pause icon survives without the server agreeing.
+const OPTIMISTIC_MS = 6000;
 
 function fmtTime(totalSeconds: number): string {
   const sec = Math.max(0, Math.round(totalSeconds));
@@ -83,8 +85,14 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [online, setOnline] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  // Optimistic play/pause overrides. Each is dropped once the server agrees, or
+  // after OPTIMISTIC_MS if it never does - clearing them on a fixed poll made
+  // the icon snap back before the extension had reported real state.
   const [optimisticPlaying, setOptimisticPlaying] = useState<boolean | null>(null);
-  const [optimisticTabPlaying, setOptimisticTabPlaying] = useState<Record<number, boolean>>({});
+  const optimisticPlayingUntil = useRef(0);
+  const [optimisticTabPlaying, setOptimisticTabPlaying] = useState<
+    Record<string, { playing: boolean; until: number }>
+  >({});
   const [trackToast, setTrackToast] = useState<string | null>(null);
   const [lockOpen, setLockOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -116,13 +124,22 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
       const s = await api.status();
       setStatus(s);
       setOnline(true);
-      // Browser playback reports no now-playing state, so only let the server
-      // override the optimistic play/pause icon when it actually knows.
-      if (s.now_playing?.state) setOptimisticPlaying(null);
-      // Tab commands land on the extension within ~2s, well inside the 3s
-      // poll cycle, so every poll already carries server truth: drop the
-      // optimistic overrides and let the fetched tab.playing render instead.
-      setOptimisticTabPlaying({});
+      const now = Date.now();
+      const npPlaying = s.now_playing?.state ? s.now_playing.state.toLowerCase().includes('play') : null;
+      setOptimisticPlaying((prev) => {
+        if (prev === null) return null;
+        if (npPlaying === prev) return null;
+        return now > optimisticPlayingUntil.current ? null : prev;
+      });
+      setOptimisticTabPlaying((prev) => {
+        const next: typeof prev = {};
+        for (const [key, entry] of Object.entries(prev)) {
+          const tab = s.browser_tabs?.find((t) => tabKey(t) === key);
+          if (!tab || tab.playing === entry.playing || now > entry.until) continue;
+          next[key] = entry;
+        }
+        return next;
+      });
       // Reconcile the timer pill with server truth on every poll; the short
       // grace window covers the beat between arming and the server reporting it.
       if (s.sleep_timer) {
@@ -230,7 +247,18 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
 
   const npState = status?.now_playing?.state?.toLowerCase() ?? null;
   const serverIsPlaying = npState ? npState.includes('play') : false;
-  const isPlaying = optimisticPlaying ?? serverIsPlaying;
+
+  // With no native now-playing, the browser tab IS the transport. Drive it
+  // directly instead of firing a system media key at whatever owns now-playing:
+  // that key and the tab buttons used to hit the same video down two paths, and
+  // neither knew what the other had done, so the two icons drifted apart.
+  const browserTabs = status?.browser_tabs ?? [];
+  const mainTab = status?.now_playing?.title
+    ? null
+    : browserTabs.find((t) => t.playing) ?? browserTabs[0] ?? null;
+  const isPlaying = mainTab
+    ? optimisticTabPlaying[tabKey(mainTab)]?.playing ?? mainTab.playing
+    : optimisticPlaying ?? serverIsPlaying;
 
   // Mirror now-playing into the native media notification (shade + Quick
   // Settings + lockscreen) while the Settings toggle is on and a device is
@@ -246,6 +274,11 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   });
 
   async function handlePlayPause() {
+    if (mainTab) {
+      await handleTabCommand(mainTab, isPlaying ? 'pause' : 'play');
+      return;
+    }
+    optimisticPlayingUntil.current = Date.now() + OPTIMISTIC_MS;
     setOptimisticPlaying(!isPlaying);
     try {
       await api.playPause();
@@ -257,16 +290,21 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   }
 
   async function handleTabCommand(tab: BrowserTab, action: BrowserTabAction) {
-    if (action === 'playpause') {
-      setOptimisticTabPlaying((prev) => ({ ...prev, [tab.tab_id]: !(prev[tab.tab_id] ?? tab.playing) }));
+    const key = tabKey(tab);
+    const wantPlaying = action === 'play' ? true : action === 'pause' ? false : null;
+    if (wantPlaying !== null) {
+      setOptimisticTabPlaying((prev) => ({
+        ...prev,
+        [key]: { playing: wantPlaying, until: Date.now() + OPTIMISTIC_MS },
+      }));
     }
     try {
       await api.tabCommand(tab.tab_id, tab.browser, action);
     } catch (err) {
-      if (action === 'playpause') {
+      if (wantPlaying !== null) {
         setOptimisticTabPlaying((prev) => {
           const next = { ...prev };
-          delete next[tab.tab_id];
+          delete next[key];
           return next;
         });
       }
@@ -344,17 +382,12 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   }
 
   async function handleSeek(seconds: number) {
-    // If the active audio is a browser tab (no native Spotify/Music now-playing
-    // but a browser tab is playing), seek THAT tab precisely via the extension.
-    // Arrow-key fallback in the server path is unreliable for browser media
-    // (YouTube Music does not seek on arrows, and the browser is not focused).
-    const playingTab =
-      !status?.now_playing?.title
-        ? status?.browser_tabs?.find((t) => t.playing) ?? null
-        : null;
+    // Same target as the main play/pause button, so the transport row acts as
+    // one unit. The server's arrow-key fallback is unreliable for browser media
+    // (YouTube Music ignores arrows, and the browser may not be focused).
     try {
-      if (playingTab) {
-        await api.tabCommand(playingTab.tab_id, playingTab.browser, 'seek', seconds);
+      if (mainTab) {
+        await api.tabCommand(mainTab.tab_id, mainTab.browser, 'seek', seconds);
         return;
       }
       const res = await api.seek(seconds);
@@ -765,7 +798,7 @@ function BrowserTabsSection({
   onVolumeCommit,
 }: {
   tabs: BrowserTab[];
-  optimisticPlaying: Record<number, boolean>;
+  optimisticPlaying: Record<string, { playing: boolean; until: number }>;
   onCommand: (tab: BrowserTab, action: BrowserTabAction) => void;
   onFullscreen: (tab: BrowserTab) => void;
   onVolumeSend: (tab: BrowserTab, v: number) => void;
@@ -774,7 +807,7 @@ function BrowserTabsSection({
   // One inline volume slider open at a time, keyed browser+tab_id so two
   // browsers with colliding numeric tab ids can't both expand.
   const [openVolumeKey, setOpenVolumeKey] = useState<string | null>(null);
-  const openVisible = tabs.some((t) => `${t.browser}-${t.tab_id}` === openVolumeKey);
+  const openVisible = tabs.some((t) => tabKey(t) === openVolumeKey);
 
   return (
     <View style={styles.browserSection}>
@@ -789,12 +822,12 @@ function BrowserTabsSection({
         nestedScrollEnabled
       >
         {tabs.map((tab, i) => {
-          const key = `${tab.browser}-${tab.tab_id}`;
+          const key = tabKey(tab);
           return (
             <BrowserTabRow
               key={key}
               tab={tab}
-              playing={optimisticPlaying[tab.tab_id] ?? tab.playing}
+              playing={optimisticPlaying[key]?.playing ?? tab.playing}
               last={i === tabs.length - 1}
               volumeOpen={openVolumeKey === key}
               onToggleVolume={() => setOpenVolumeKey((prev) => (prev === key ? null : key))}
@@ -843,7 +876,7 @@ function BrowserTabRow({
         <View style={styles.browserActions}>
           <PressableScale
             style={styles.browserBtn}
-            onPress={() => onCommand('playpause')}
+            onPress={() => onCommand(playing ? 'pause' : 'play')}
             accessibilityLabel={playing ? 'Pause tab' : 'Play tab'}
           >
             {playing ? <IconPause size={13} color={colors.off} /> : <IconPlay size={13} color={colors.off} />}
@@ -854,8 +887,12 @@ function BrowserTabRow({
           <PressableScale style={styles.browserBtn} onPress={onFullscreen} accessibilityLabel="Switch and fullscreen tab">
             <IconExpand size={13} color={colors.off72} />
           </PressableScale>
-          <PressableScale style={styles.browserBtn} onPress={() => onCommand('mute')} accessibilityLabel="Mute tab">
-            <IconMute size={13} color={colors.off72} />
+          <PressableScale
+            style={[styles.browserBtn, tab.muted && styles.browserBtnOn]}
+            onPress={() => onCommand('mute')}
+            accessibilityLabel={tab.muted ? 'Unmute tab' : 'Mute tab'}
+          >
+            <IconMute size={13} color={tab.muted ? colors.green : colors.off72} />
           </PressableScale>
           <PressableScale
             style={[styles.browserBtn, volumeOpen && styles.browserBtnOn]}

@@ -13,6 +13,8 @@
  *     report the full list to the server.
  *   - poll /browser/commands every 2s while we know about at least one
  *     media tab, otherwise every 15s (idle, nothing to control).
+ *   - after executing any command, report again immediately so the phone gets
+ *     real state within ~1s instead of waiting out the 5s report interval.
  *
  * Note: Chrome clamps alarm periods to a 1-minute minimum for extensions
  * installed from the Chrome Web Store. That clamp does not apply to
@@ -63,6 +65,19 @@ function serverFetch(config, path, options) {
   });
 }
 
+function tabEntry(tab, lastSeenAt) {
+  return {
+    tabId: tab.id,
+    title: tab.title || "",
+    urlHost: hostFromUrl(tab.url),
+    audible: Boolean(tab.audible),
+    muted: Boolean(tab.mutedInfo && tab.mutedInfo.muted),
+    active: Boolean(tab.active),
+    discarded: Boolean(tab.discarded),
+    lastSeenAt,
+  };
+}
+
 /**
  * Collects audible tabs plus recently-known media tabs, persists the merged
  * set, and reports it to the server. Returns the number of tabs reported so
@@ -85,33 +100,19 @@ async function collectAndReport() {
   const nextKnown = {};
 
   for (const tab of audibleTabs) {
-    nextKnown[tab.id] = {
-      tabId: tab.id,
-      title: tab.title || "",
-      urlHost: hostFromUrl(tab.url),
-      audible: true,
-      muted: Boolean(tab.mutedInfo && tab.mutedInfo.muted),
-      playing: true,
-      lastSeenAt: now,
-    };
+    nextKnown[tab.id] = tabEntry(tab, now);
   }
 
   // Carry over any tab we have seen play, for as long as it stays OPEN (not on
   // a timer): a video you paused to listen to music might sit paused for an
   // hour, and you still want to resume it from the phone. It drops out only
-  // when the tab is actually closed (tabs.get throws). Quiet tabs report as
-  // paused (playing:false, audible:false) so the phone shows the right icon.
-  for (const [tabIdKey, entry] of Object.entries(known)) {
+  // when the tab is actually closed (tabs.get throws). Re-read from the live
+  // tab every time so title/muted/active never go stale.
+  for (const tabIdKey of Object.keys(known)) {
     if (nextKnown[tabIdKey]) continue;
     try {
       const tab = await api.tabs.get(Number(tabIdKey));
-      nextKnown[tabIdKey] = {
-        ...entry,
-        title: tab.title || entry.title,
-        urlHost: hostFromUrl(tab.url) || entry.urlHost,
-        audible: false,
-        playing: false,
-      };
+      nextKnown[tabIdKey] = tabEntry(tab, known[tabIdKey].lastSeenAt || now);
     } catch (err) {
       // Tab was closed - let it drop out of the known set.
     }
@@ -119,23 +120,29 @@ async function collectAndReport() {
 
   await setKnownTabs(nextKnown);
 
-  // Best-effort per-tab media volume (0-100 int, null when unreadable): the
-  // known set is small (only media tabs), so one cheap injection per tab per
-  // report keeps the phone's volume sliders in sync.
-  const volumes = {};
-  for (const tabIdKey of Object.keys(nextKnown)) {
-    volumes[tabIdKey] = await readTabVolume(Number(tabIdKey));
-  }
+  // One injection per known media tab gives real element state. `audible` is
+  // only a discovery hint: a muted or silent video is still playing, and
+  // inferring `playing` from it inverted the phone's play/pause icon.
+  const ids = Object.keys(nextKnown).map(Number);
+  const probes = await Promise.all(
+    ids.map((id) => (nextKnown[id].discarded ? Promise.resolve(null) : probeTab(id)))
+  );
 
-  const tabs = Object.entries(nextKnown).map(([tabIdKey, t]) => ({
-    tab_id: t.tabId,
-    title: t.title,
-    url_host: t.urlHost,
-    audible: t.audible,
-    muted: t.muted,
-    playing: t.playing,
-    volume: volumes[tabIdKey],
-  }));
+  const tabs = ids.map((id, i) => {
+    const t = nextKnown[id];
+    const p = probes[i];
+    return {
+      tab_id: t.tabId,
+      title: t.title,
+      url_host: t.urlHost,
+      audible: t.audible,
+      muted: t.muted,
+      playing: p ? !p.paused : t.audible,
+      volume: p ? p.volume : null,
+      active: t.active,
+      fullscreen: p ? p.fullscreen : false,
+    };
+  });
 
   try {
     await serverFetch(config, "/browser/report", {
@@ -151,55 +158,75 @@ async function collectAndReport() {
 }
 
 /**
- * Reads the volume (0-100 int) of the tab's relevant media element: the
- * playing one, else the largest by finite duration. Returns null whenever
- * that is not cheaply possible (no media, restricted page, injection denied).
+ * The ONE function injected into pages. Every media command and the state probe
+ * goes through it, so they can never disagree about which element is "the"
+ * player - seek used to filter by duration while playpause picked by area, and
+ * the two then acted on different elements.
+ *
+ * Only real seekable media counts: YouTube keeps extra <video> elements (ads,
+ * previews) with a NaN duration, and picking one made commands silent no-ops.
+ * Returns null when the page has no such element.
  */
-async function readTabVolume(tabId) {
+function mediaOp(op, arg) {
+  const media = Array.from(document.querySelectorAll("video, audio")).filter(
+    (el) => Number.isFinite(el.duration) && el.duration > 0
+  );
+  if (media.length === 0) return null;
+  const el = media.find((m) => !m.paused) || media.reduce((a, b) => (b.duration > a.duration ? b : a));
+
+  if (op === "probe") {
+    return {
+      paused: el.paused,
+      volume: Math.round((el.volume || 0) * 100),
+      fullscreen: document.fullscreenElement != null,
+    };
+  }
+  if (op === "seek") {
+    const t = Math.max(0, Math.min(el.duration, (el.currentTime || 0) + arg));
+    try {
+      if (typeof el.fastSeek === "function") el.fastSeek(t);
+      else el.currentTime = t;
+    } catch (e) {
+      el.currentTime = t;
+    }
+    return true;
+  }
+  // Deliberately does NOT touch `muted`, even at 0: mute stays its own command,
+  // so volume 0 and mute remain independently reversible from the phone.
+  if (op === "setvolume") {
+    el.volume = arg / 100;
+    return true;
+  }
+  // "play" | "pause" | "toggle"
+  const want = op === "toggle" ? el.paused : op === "play";
+  if (!want) {
+    el.pause();
+    return true;
+  }
+  // play() rejects when the autoplay policy blocks a scripted start.
+  return Promise.resolve(el.play()).then(
+    () => true,
+    () => false
+  );
+}
+
+/** Runs mediaOp in a tab. Returns its result, or null if injection failed. */
+async function runMediaOp(tabId, op, arg = null) {
   try {
     const results = await api.scripting.executeScript({
       target: { tabId },
-      func: () => {
-        const media = Array.from(document.querySelectorAll("video, audio")).filter(
-          (el) => Number.isFinite(el.duration) && el.duration > 0
-        );
-        if (media.length === 0) return null;
-        const el = media.find((m) => !m.paused) || media.reduce((a, b) => (b.duration > a.duration ? b : a));
-        return Math.round((el.volume || 0) * 100);
-      },
+      args: [op, arg],
+      func: mediaOp,
     });
-    const value = results && results[0] ? results[0].result : null;
-    return typeof value === "number" ? value : null;
+    return results && results[0] ? results[0].result : null;
   } catch (err) {
     return null;
   }
 }
 
-async function togglePlayback(tabId) {
-  try {
-    await api.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        const media = Array.from(document.querySelectorAll("video, audio"));
-        if (media.length === 0) return;
-        const currentlyPlaying = media.find((el) => !el.paused);
-        const target =
-          currentlyPlaying ||
-          media.reduce((largest, el) => {
-            const area = (el.videoWidth || el.clientWidth || 0) * (el.videoHeight || el.clientHeight || 0);
-            const largestArea = (largest.videoWidth || largest.clientWidth || 0) * (largest.videoHeight || largest.clientHeight || 0);
-            return area > largestArea ? el : largest;
-          });
-        if (target.paused) {
-          target.play();
-        } else {
-          target.pause();
-        }
-      },
-    });
-  } catch (err) {
-    console.error("macremote: playpause injection failed", err);
-  }
+/** {paused, volume 0-100, fullscreen}, or null when unreadable. */
+function probeTab(tabId) {
+  return runMediaOp(tabId, "probe");
 }
 
 async function focusTab(tabId) {
@@ -208,6 +235,17 @@ async function focusTab(tabId) {
     if (tab && tab.windowId != null) {
       await api.windows.update(tab.windowId, { focused: true });
     }
+    // Drop focus from any text field, so a hotkey the Mac sends next (the "f"
+    // of the fullscreen flow) reaches the player instead of being typed.
+    await api.scripting
+      .executeScript({
+        target: { tabId },
+        func: () => {
+          const a = document.activeElement;
+          if (a && a !== document.body && typeof a.blur === "function") a.blur();
+        },
+      })
+      .catch(() => undefined);
   } catch (err) {
     console.error("macremote: focus failed", err);
   }
@@ -223,76 +261,24 @@ async function toggleMute(tabId) {
   }
 }
 
-async function seekTab(tabId, seconds) {
-  const delta = Number(seconds) || 0;
-  if (!delta) return;
-  try {
-    await api.scripting.executeScript({
-      target: { tabId },
-      args: [delta],
-      func: (d) => {
-        // Only consider real, seekable media with a finite duration. YouTube /
-        // YT Music often have extra <video> elements (ads, previews) with NaN
-        // duration; picking one of those made currentTime a NaN no-op before.
-        const media = Array.from(document.querySelectorAll("video, audio")).filter(
-          (el) => Number.isFinite(el.duration) && el.duration > 0
-        );
-        if (media.length === 0) return;
-        const el = media.find((m) => !m.paused) || media.reduce((a, b) => (b.duration > a.duration ? b : a));
-        const t = Math.max(0, Math.min(el.duration, (el.currentTime || 0) + d));
-        try {
-          if (typeof el.fastSeek === "function") el.fastSeek(t);
-          else el.currentTime = t;
-        } catch (e) {
-          el.currentTime = t;
-        }
-      },
-    });
-  } catch (err) {
-    console.error("macremote: seek injection failed", err);
-  }
-}
-
-/**
- * Sets the tab's media element volume (value is 0-100). Targets the playing
- * element, else the largest finite-duration one - same selection as seek.
- * Deliberately does NOT touch `muted`, even at 0: mute stays its own command,
- * so volume 0 and mute remain independently reversible from the phone.
- */
-async function setTabVolume(tabId, value) {
-  const level = Math.max(0, Math.min(100, Number(value) || 0));
-  try {
-    await api.scripting.executeScript({
-      target: { tabId },
-      args: [level],
-      func: (v) => {
-        const media = Array.from(document.querySelectorAll("video, audio")).filter(
-          (el) => Number.isFinite(el.duration) && el.duration > 0
-        );
-        if (media.length === 0) return;
-        const el = media.find((m) => !m.paused) || media.reduce((a, b) => (b.duration > a.duration ? b : a));
-        el.volume = v / 100;
-      },
-    });
-  } catch (err) {
-    console.error("macremote: setvolume injection failed", err);
-  }
-}
-
 async function executeCommand(command) {
   const tabId = command.tab_id;
-  if (command.action === "playpause") {
-    await togglePlayback(tabId);
-  } else if (command.action === "focus") {
+  const action = command.action;
+  if (action === "play" || action === "pause") {
+    await runMediaOp(tabId, action);
+  } else if (action === "playpause") {
+    await runMediaOp(tabId, "toggle");
+  } else if (action === "focus") {
     await focusTab(tabId);
-  } else if (command.action === "mute") {
+  } else if (action === "mute") {
     await toggleMute(tabId);
-  } else if (command.action === "seek") {
-    await seekTab(tabId, Number(command.value) || 0);
-  } else if (command.action === "setvolume") {
-    await setTabVolume(tabId, Number(command.value) || 0);
+  } else if (action === "seek") {
+    const delta = Number(command.value) || 0;
+    if (delta) await runMediaOp(tabId, "seek", delta);
+  } else if (action === "setvolume") {
+    await runMediaOp(tabId, "setvolume", Math.max(0, Math.min(100, Number(command.value) || 0)));
   } else {
-    console.warn("macremote: unknown command action", command.action);
+    console.warn("macremote: unknown command action", action);
   }
 }
 
@@ -306,9 +292,14 @@ async function pollCommands() {
     });
     if (!res.ok) return;
     const body = await res.json();
-    for (const command of body.commands || []) {
+    const commands = body.commands || [];
+    for (const command of commands) {
       await executeCommand(command);
     }
+    // Report straight away instead of waiting out the 5s interval: the phone
+    // drew an optimistic icon on tap and needs real state to confirm it, and
+    // the fullscreen flow waits on this report to know the tab switched.
+    if (commands.length > 0) await collectAndReport();
   } catch (err) {
     console.error("macremote: /browser/commands poll failed", err);
   }

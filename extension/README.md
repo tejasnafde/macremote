@@ -8,12 +8,22 @@ tabs are otherwise invisible to it.
 
 What it does, every few seconds:
 - Collects tabs currently producing sound (`tabs.query({audible: true})`),
-  plus any tab it saw playing in the last 5 minutes (so a paused tab stays
+  plus any tab it has seen play that is still open (so a paused tab stays
   controllable instead of vanishing from the phone).
+- Reads each of those tabs for real state: is the media element paused, its
+  volume, and whether the page is fullscreen. `audible` is only a discovery
+  hint. A muted or silent video is still playing, so deriving "playing" from
+  sound inverted the phone's play/pause icon.
 - Reports that list to `POST /browser/report` on your macremote server.
-- Polls `GET /browser/commands` for playpause/focus/mute commands queued by
-  the app, and carries them out (toggle the largest `<video>`/`<audio>` on
-  the page, focus the tab, or toggle mute).
+- Polls `GET /browser/commands` for play/pause/focus/mute/seek/setvolume
+  commands queued by the app and carries them out, then reports again
+  immediately so the phone can confirm the icon it drew on tap.
+
+All page work goes through one injected function, `mediaOp`, so the probe and
+every command act on the same element. It picks the playing element, else the
+longest one, and ignores anything without a finite duration: YouTube keeps
+extra `<video>` elements for ads and previews, and targeting one of those made
+commands silent no-ops. `node mediaOp.test.mjs` checks that logic.
 
 No build step is required to develop or load the extension; `build.sh` only
 exists to produce a distributable zip per browser.
