@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
   runOnJS,
@@ -41,6 +42,7 @@ export function VolumeRail({
   onCommitVolume,
   onToggleMute,
 }: VolumeRailProps) {
+  const insets = useSafeAreaInsets();
   const displayVolume = useSharedValue(value);
   const labelOpacity = useSharedValue(0);
   const dragging = useSharedValue(false);
@@ -226,7 +228,7 @@ export function VolumeRail({
   }));
 
   return (
-    <View style={[styles.rail, disabled && styles.disabled]} pointerEvents={disabled ? 'none' : 'auto'}>
+    <View style={[styles.rail, { bottom: insets.bottom + 20 }, disabled && styles.disabled]} pointerEvents={disabled ? 'none' : 'auto'}>
       <Animated.Text style={[styles.value, labelStyle]}>{label}</Animated.Text>
       <GestureDetector gesture={gesture}>
         <View
@@ -261,7 +263,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 10,
     top: 74,
-    bottom: 18,
     width: 58,
     alignItems: 'center',
   },
@@ -306,11 +307,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.off,
     marginBottom: -2.5,
   },
+  // Matches the 44px secondary-row buttons it sits beside; it used to be 46,
+  // which alone made it read as misaligned even once the bottoms lined up.
   muteBtn: {
     marginTop: 12,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.ink850,
     alignItems: 'center',
     justifyContent: 'center',

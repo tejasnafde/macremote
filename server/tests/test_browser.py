@@ -60,12 +60,14 @@ def test_report_and_status_shape(client, fake_hs, browser_registry):
     assert status_resp.status_code == 200
     assert status_resp.json()["browser_tabs"] == [
         {
-            "tab_id": 1, "browser": "chrome", "title": "Song A", "playing": True,
-            "audible": True, "muted": False, "volume": None, "fullscreen": False, "controllable": None,
+            "tab_id": 1, "browser": "chrome", "title": "Song A", "url_host": "youtube.com",
+            "playing": True, "audible": True, "muted": False, "volume": None,
+            "fullscreen": False, "controllable": None,
         },
         {
-            "tab_id": 2, "browser": "chrome", "title": "Song B", "playing": False,
-            "audible": False, "muted": True, "volume": None, "fullscreen": False, "controllable": None,
+            "tab_id": 2, "browser": "chrome", "title": "Song B", "url_host": "spotify.com",
+            "playing": False, "audible": False, "muted": True, "volume": None,
+            "fullscreen": False, "controllable": None,
         },
     ]
 

@@ -303,18 +303,27 @@ export function BrightnessDial({
         disabled={disabled}
         accessibilityLabel={multi ? `Switch active display, currently ${activeDisplay.name}` : `${activeDisplay.name} brightness`}
       >
-        <View style={styles.pctRow}>
-          <Text style={styles.pct} allowFontScaling={false}>
-            {label}
+        {/* The hub is a CIRCLE, so a child sized against its square box overflows
+            the curve near the top and bottom. Everything lives in a chord-width
+            box instead: 76% of the diameter is inside the arc across the whole
+            text block. "100%" also auto-shrinks, since three digits plus the
+            sign is the widest the readout ever gets. */}
+        <View style={[styles.hubContent, { width: size * 0.62 * 0.76 }]}>
+          <View style={styles.pctRow}>
+            <Text style={styles.pct} allowFontScaling={false} numberOfLines={1} adjustsFontSizeToFit>
+              {label}
+            </Text>
+            <Text style={styles.pctSign} allowFontScaling={false}>
+              %
+            </Text>
+          </View>
+          <Text style={styles.name} numberOfLines={1}>
+            {activeDisplay.name}
           </Text>
-          <Text style={styles.pctSign} allowFontScaling={false}>
-            %
+          <Text style={[styles.note, !isSoftware && styles.noteHidden]} numberOfLines={1}>
+            software
           </Text>
         </View>
-        <Text style={styles.name} numberOfLines={1}>
-          {activeDisplay.name}
-        </Text>
-        <Text style={[styles.note, !isSoftware && styles.noteHidden]}>software</Text>
       </PressableScale>
 
       {multi && effective.length <= BLOOM_MAX && (
@@ -453,8 +462,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pctRow: { flexDirection: 'row', alignItems: 'baseline' },
-  pct: { fontFamily: fonts.display, fontSize: 34, color: colors.off, lineHeight: 36 },
+  hubContent: { alignItems: 'center' },
+  pctRow: { flexDirection: 'row', alignItems: 'baseline', maxWidth: '100%' },
+  pct: { fontFamily: fonts.display, fontSize: 30, color: colors.off, lineHeight: 33 },
   pctSign: { fontFamily: fonts.display, fontSize: 15, color: colors.off55, marginLeft: 1 },
   name: {
     fontFamily: fonts.bold,
@@ -462,12 +472,12 @@ const styles = StyleSheet.create({
     color: colors.off72,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
-    marginTop: 4,
-    maxWidth: '86%',
+    marginTop: 3,
+    maxWidth: '100%',
   },
   note: {
     fontFamily: fonts.medium,
-    fontSize: 9,
+    fontSize: 8.5,
     color: colors.off38,
     letterSpacing: 0.4,
     textTransform: 'uppercase',

@@ -81,12 +81,18 @@ export function IconNext({ size = 24, color = '#f3f5f1' }: IconProps) {
 // approved for this stroke weight), mirrored for "back" via a <G> transform
 // so the arrowhead reads as rewind vs fast-forward, with a small "10" set as
 // real SVG text (not a hand-drawn digit path) centered in the loop.
+//
+// Geometry note: the ring is centred on (12,12), the middle of the viewBox. It
+// used to sit on (12,11), so the whole glyph rode a unit high inside its round
+// button - the same shape and the same bug in IconRefresh, fixed with it. The
+// "10" baseline is centre + ~0.36em, putting the digits' optical middle on the
+// ring centre rather than below it.
 export function IconSeekForward10({ size = 27, color = '#f3f5f1' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M20 11a8 8 0 1 0-2.3 5.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M20 5v6h-6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
-      <SvgText x={12} y={15.6} fontSize={8.5} fontWeight="800" fill={color} textAnchor="middle">
+      <Path d="M20 12a8 8 0 1 0-2.3 5.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M20 6v6h-6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+      <SvgText x={12} y={15.1} fontSize={8.5} fontWeight="800" fill={color} textAnchor="middle">
         10
       </SvgText>
     </Svg>
@@ -97,10 +103,10 @@ export function IconSeekBack10({ size = 27, color = '#f3f5f1' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <G transform="scale(-1,1) translate(-24,0)">
-        <Path d="M20 11a8 8 0 1 0-2.3 5.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
-        <Path d="M20 5v6h-6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M20 12a8 8 0 1 0-2.3 5.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M20 6v6h-6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
       </G>
-      <SvgText x={12} y={15.6} fontSize={8.5} fontWeight="800" fill={color} textAnchor="middle">
+      <SvgText x={12} y={15.1} fontSize={8.5} fontWeight="800" fill={color} textAnchor="middle">
         10
       </SvgText>
     </Svg>
@@ -240,8 +246,8 @@ export function IconCheck({ size = 19, color = '#04140b' }: IconProps) {
 export function IconRefresh({ size = 19, color = '#04140b' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M20 11a8 8 0 1 0-2.3 5.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M20 5v6h-6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M20 12a8 8 0 1 0-2.3 5.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M20 6v6h-6" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -317,12 +323,13 @@ export function IconChevronStack({ size = 15, color = '#4ade80' }: IconProps) {
 }
 
 export function IconCursor({ size = 20, color = '#f3f5f1' }: IconProps) {
-  // Pointer arrow centered in the 24x24 box (ink bbox ~6..18 both axes) so it
-  // sits centered inside the round button.
+  // Pointer arrow centred in the 24x24 box: the ink bbox is x/y 5.75..18.25, so
+  // both midpoints land on 12. The old path sat high and right of centre, which
+  // showed against the other round buttons sharing its row.
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M6 5 18.5 10.6l-5.3 1.5-2.2 5.4z"
+        d="M5.75 5.75 18.25 11.35l-5.3 1.5-2.2 5.4z"
         stroke={color}
         strokeWidth={1.6}
         strokeLinecap="round"

@@ -38,6 +38,8 @@ export interface BrowserTab {
   tab_id: number;
   browser: 'firefox' | 'chrome';
   title: string;
+  /** Hostname, e.g. "youtube.com". Absent on older servers. */
+  url_host?: string;
   playing: boolean;
   audible: boolean;
   /** Absent on servers older than the muted fix. */

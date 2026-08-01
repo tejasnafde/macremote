@@ -32,6 +32,7 @@ async def get_status() -> dict:
             "tab_id": tab["tab_id"],
             "browser": tab["browser"],
             "title": tab["title"],
+            "url_host": tab["url_host"],  # the phone shows this to tell tabs apart
             "playing": tab["playing"],
             "audible": tab["audible"],
             "muted": tab["muted"],

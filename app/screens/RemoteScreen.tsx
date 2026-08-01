@@ -25,6 +25,7 @@ import {
   IconBrightnessDown,
   IconBrightnessUp,
   IconChevronDouble,
+  IconChevronRight,
   IconCursor,
   IconDownload,
   IconHelp,
@@ -51,6 +52,7 @@ import { getMediaNotificationEnabled } from '../lib/settings';
 import { useMediaNotification } from '../lib/useMediaNotification';
 import { colors, fonts, radii, railWidth, spacing } from '../theme';
 import { BrightnessDial } from './remote/BrightnessDial';
+import { BrowserTabSheet } from './remote/BrowserTabSheet';
 import { DisplayChooser } from './remote/DisplayChooser';
 import { DisplayHelpCard } from './remote/DisplayHelpCard';
 import { LockOverlay } from './remote/LockOverlay';
@@ -100,6 +102,9 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   // forever would permanently keep the media key away from VLC and friends.
   const lastTabTargetKey = useRef<string | null>(null);
   const lastTabTargetAt = useRef(0);
+  // Which tab's control sheet is open, keyed browser:tab_id so the sheet keeps
+  // following live /status updates instead of holding a stale copy of the tab.
+  const [sheetTabKey, setSheetTabKey] = useState<string | null>(null);
   const [trackToast, setTrackToast] = useState<string | null>(null);
   const [lockOpen, setLockOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -279,11 +284,11 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
   //    iframe or a closed shadow root reports playing (from `audible`) but takes
   //    no commands, so targeting it made the button a no-op. The system media key
   //    reaches those through the browser's own MediaSession, so leave them to it.
-  //    `controllable === undefined` means an older server, so assume yes.
-  const browserTabs = status?.browser_tabs ?? [];
   //    When `controllable` is absent (older extension or server) fall back to
   //    `volume`, which comes from the same probe: null there means the probe
   //    found nothing, so the tab takes no commands either.
+  const browserTabs = status?.browser_tabs ?? [];
+  const sheetTab = browserTabs.find((t) => tabKey(t) === sheetTabKey) ?? null;
   const drivable = (t: BrowserTab) => t.controllable ?? t.volume != null;
   const nativeNowPlaying = Boolean(status?.now_playing?.title || status?.now_playing?.state);
   const rememberTabUntil = lastTabTargetAt.current + TAB_TARGET_MEMORY_MS;
@@ -582,10 +587,8 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
           <BrowserTabsSection
             tabs={status.browser_tabs}
             optimisticPlaying={optimisticTabPlaying}
+            onOpen={(t) => setSheetTabKey(tabKey(t))}
             onCommand={handleTabCommand}
-            onFullscreen={handleTabFullscreen}
-            onVolumeSend={handleTabVolumeSend}
-            onVolumeCommit={handleTabVolumeCommit}
           />
         )}
 
@@ -661,6 +664,16 @@ export function RemoteScreen({ onOpenDevices, onOpenReading, onOpenApps, refresh
         onChangeVolume={handleSetVolume}
         onCommitVolume={handleCommitVolume}
         onToggleMute={handleToggleMute}
+      />
+
+      <BrowserTabSheet
+        tab={sheetTab}
+        playing={sheetTab ? optimisticTabPlaying[tabKey(sheetTab)]?.playing ?? sheetTab.playing : false}
+        onClose={() => setSheetTabKey(null)}
+        onCommand={handleTabCommand}
+        onFullscreen={handleTabFullscreen}
+        onVolumeSend={handleTabVolumeSend}
+        onVolumeCommit={handleTabVolumeCommit}
       />
 
       <LockOverlay visible={lockOpen} onUnlock={() => setLockOpen(false)} />
@@ -838,135 +851,85 @@ function NowPlayingHero({
 
 /* --------------------------- browser tabs section --------------------------- */
 
-const BROWSER_ROW_HEIGHT = 42;
-const BROWSER_VOLUME_ROW_HEIGHT = 36;
-const BROWSER_MAX_ROWS = 3;
-
 function BrowserTabsSection({
   tabs,
   optimisticPlaying,
+  onOpen,
   onCommand,
-  onFullscreen,
-  onVolumeSend,
-  onVolumeCommit,
 }: {
   tabs: BrowserTab[];
   optimisticPlaying: Record<string, { playing: boolean; until: number }>;
+  onOpen: (tab: BrowserTab) => void;
   onCommand: (tab: BrowserTab, action: BrowserTabAction) => void;
-  onFullscreen: (tab: BrowserTab) => void;
-  onVolumeSend: (tab: BrowserTab, v: number) => void;
-  onVolumeCommit: (tab: BrowserTab, v: number) => void;
 }) {
-  // One inline volume slider open at a time, keyed browser+tab_id so two
-  // browsers with colliding numeric tab ids can't both expand.
-  const [openVolumeKey, setOpenVolumeKey] = useState<string | null>(null);
-  const openVisible = tabs.some((t) => tabKey(t) === openVolumeKey);
-
   return (
     <View style={styles.browserSection}>
       <Text style={styles.browserHead}>Browser</Text>
-      <ScrollView
-        style={
-          tabs.length > BROWSER_MAX_ROWS
-            ? { maxHeight: BROWSER_ROW_HEIGHT * BROWSER_MAX_ROWS + (openVisible ? BROWSER_VOLUME_ROW_HEIGHT : 0) }
-            : undefined
-        }
-        showsVerticalScrollIndicator={false}
-        nestedScrollEnabled
-      >
-        {tabs.map((tab, i) => {
-          const key = tabKey(tab);
-          return (
-            <BrowserTabRow
-              key={key}
-              tab={tab}
-              playing={optimisticPlaying[key]?.playing ?? tab.playing}
-              last={i === tabs.length - 1}
-              volumeOpen={openVolumeKey === key}
-              onToggleVolume={() => setOpenVolumeKey((prev) => (prev === key ? null : key))}
-              onCommand={(action) => onCommand(tab, action)}
-              onFullscreen={() => onFullscreen(tab)}
-              onVolumeSend={(v) => onVolumeSend(tab, v)}
-              onVolumeCommit={(v) => onVolumeCommit(tab, v)}
-            />
-          );
-        })}
-      </ScrollView>
+      {tabs.map((tab, i) => {
+        const key = tabKey(tab);
+        const playing = optimisticPlaying[key]?.playing ?? tab.playing;
+        return (
+          <BrowserTabRow
+            key={key}
+            tab={tab}
+            playing={playing}
+            last={i === tabs.length - 1}
+            onOpen={() => onOpen(tab)}
+            onTogglePlay={() => onCommand(tab, playing ? 'pause' : 'play')}
+          />
+        );
+      })}
     </View>
   );
 }
 
+// Row = identity only: which tab is this, is it playing. One inline play/pause
+// (the action you want most, and not worth a sheet), then the row itself opens
+// the sheet for everything else.
 function BrowserTabRow({
   tab,
   playing,
   last,
-  volumeOpen,
-  onToggleVolume,
-  onCommand,
-  onFullscreen,
-  onVolumeSend,
-  onVolumeCommit,
+  onOpen,
+  onTogglePlay,
 }: {
   tab: BrowserTab;
   playing: boolean;
   last: boolean;
-  volumeOpen: boolean;
-  onToggleVolume: () => void;
-  onCommand: (action: BrowserTabAction) => void;
-  onFullscreen: () => void;
-  onVolumeSend: (v: number) => void;
-  onVolumeCommit: (v: number) => void;
+  onOpen: () => void;
+  onTogglePlay: () => void;
 }) {
+  const host = tab.url_host || (tab.browser === 'firefox' ? 'Firefox' : 'Chrome');
   return (
-    <View>
-      <View style={[styles.browserRow, !last && !volumeOpen && styles.browserRowDivider]}>
-        <View style={styles.browserBadge}>
-          <Text style={styles.browserBadgeText}>{tab.browser === 'firefox' ? 'F' : 'C'}</Text>
+    <View style={[styles.browserRow, !last && styles.browserRowDivider]}>
+      <PressableScale
+        style={styles.browserRowMain}
+        onPress={onOpen}
+        accessibilityLabel={`${tab.title || 'Untitled tab'}, ${host}. Open tab controls`}
+      >
+        <View style={[styles.browserBadge, playing && styles.browserBadgeOn]}>
+          <Text style={[styles.browserBadgeText, playing && styles.browserBadgeTextOn]}>
+            {tab.browser === 'firefox' ? 'F' : 'C'}
+          </Text>
         </View>
-        <Text style={styles.browserTitle} numberOfLines={1}>
-          {tab.title || 'Untitled tab'}
-        </Text>
-        <View style={styles.browserActions}>
-          <PressableScale
-            style={styles.browserBtn}
-            onPress={() => onCommand(playing ? 'pause' : 'play')}
-            accessibilityLabel={playing ? 'Pause tab' : 'Play tab'}
-          >
-            {playing ? <IconPause size={13} color={colors.off} /> : <IconPlay size={13} color={colors.off} />}
-          </PressableScale>
-          <PressableScale style={styles.browserBtn} onPress={() => onCommand('focus')} accessibilityLabel="Focus tab">
-            <IconArrowUpRight size={13} color={colors.off72} />
-          </PressableScale>
-          <PressableScale style={styles.browserBtn} onPress={onFullscreen} accessibilityLabel="Switch and fullscreen tab">
-            <IconExpand size={13} color={colors.off72} />
-          </PressableScale>
-          <PressableScale
-            style={[styles.browserBtn, tab.muted && styles.browserBtnOn]}
-            onPress={() => onCommand('mute')}
-            accessibilityLabel={tab.muted ? 'Unmute tab' : 'Mute tab'}
-          >
-            <IconMute size={13} color={tab.muted ? colors.green : colors.off72} />
-          </PressableScale>
-          <PressableScale
-            style={[styles.browserBtn, volumeOpen && styles.browserBtnOn]}
-            onPress={onToggleVolume}
-            accessibilityLabel="Tab volume"
-          >
-            <IconVolume size={13} color={volumeOpen ? colors.green : colors.off72} />
-          </PressableScale>
+        <View style={styles.browserText}>
+          <Text style={styles.browserTitle} numberOfLines={1}>
+            {tab.title || 'Untitled tab'}
+          </Text>
+          <Text style={styles.browserHost} numberOfLines={1}>
+            {host}
+            {tab.muted ? ', muted' : ''}
+          </Text>
         </View>
-      </View>
-      {volumeOpen && (
-        <View style={[styles.browserVolumeRow, !last && styles.browserRowDivider]}>
-          <HSlider
-            value={tab.volume ?? 100}
-            onSend={onVolumeSend}
-            onCommit={onVolumeCommit}
-            showValue
-            accessibilityLabel="Tab volume slider"
-          />
-        </View>
-      )}
+        <IconChevronRight size={14} color={colors.off38} />
+      </PressableScale>
+      <PressableScale
+        style={[styles.browserBtn, playing && styles.browserBtnOn]}
+        onPress={onTogglePlay}
+        accessibilityLabel={playing ? `Pause ${tab.title}` : `Play ${tab.title}`}
+      >
+        {playing ? <IconPause size={14} color={colors.green} /> : <IconPlay size={14} color={colors.off72} />}
+      </PressableScale>
     </View>
   );
 }
@@ -1198,16 +1161,12 @@ const styles = StyleSheet.create({
   // BROWSER_ROW_HEIGHT/BROWSER_MAX_ROWS); the inner ScrollView only caps
   // height when there are more tabs than that, so a 1-2 tab list never
   // shows a clipped scroll affordance it doesn't need.
+  // Flat list, not a card, and no inner scroller: every tab is visible at once.
+  // The old boxed ScrollView capped at 3 rows, so you scrolled a small box
+  // inside a screen that was not itself scrolling.
   browserSection: {
     marginTop: 10,
     marginRight: railWidth - spacing.screenX,
-    backgroundColor: colors.ink850,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: radii.lg,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 2,
   },
   browserHead: {
     fontFamily: fonts.bold,
@@ -1215,46 +1174,43 @@ const styles = StyleSheet.create({
     color: colors.off38,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
-    marginBottom: 6,
+    marginBottom: 2,
   },
-  browserRow: {
+  browserRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // The row body takes all the width the one trailing button does not, so the
+  // title gets the whole line instead of ~68px between five buttons.
+  browserRowMain: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    height: BROWSER_ROW_HEIGHT,
+    paddingVertical: 9,
   },
   browserRowDivider: { borderBottomWidth: 1, borderBottomColor: colors.line },
   browserBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 7,
     backgroundColor: colors.ink700,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  browserBadgeText: { fontFamily: fonts.extraBold, fontSize: 10.5, color: colors.off72 },
-  browserTitle: { flex: 1, minWidth: 0, fontFamily: fonts.medium, fontSize: 12.5, color: colors.off },
-  // Four 28px buttons + 6px gaps = 130px; with the 22px badge and gaps the
-  // title still keeps ~68px at 360px width, enough for an ellipsized name.
-  browserActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  browserBadgeOn: { backgroundColor: colors.green14 },
+  browserBadgeText: { fontFamily: fonts.extraBold, fontSize: 11, color: colors.off72 },
+  browserBadgeTextOn: { color: colors.green },
+  browserText: { flex: 1, minWidth: 0, gap: 1 },
+  browserTitle: { fontFamily: fonts.medium, fontSize: 13, color: colors.off },
+  browserHost: { fontFamily: fonts.body, fontSize: 11, color: colors.off38 },
   browserBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.ink700,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.ink800,
     alignItems: 'center',
     justifyContent: 'center',
   },
   browserBtnOn: { backgroundColor: colors.green14 },
-  // Inline expandable volume: indented past the badge column so the slider
-  // reads as belonging to the row above it.
-  browserVolumeRow: {
-    height: BROWSER_VOLUME_ROW_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 32,
-    paddingBottom: 6,
-  },
 
   thumbZone: { marginTop: 'auto', alignItems: 'center', paddingRight: 56 },
 
