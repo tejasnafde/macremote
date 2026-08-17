@@ -39,9 +39,8 @@ garbage). Dark-first (it's a night-stand app). Each mockup must cover ALL flows.
 | `console.html` | **Ledger** | A pro utility — fastest scan, zero chrome | Dense single column of full-bleed rows with inline sliders and tabular-numeral values, hairline dividers, restrained industrial elegance. Instrument Sans + tabular nums. |
 | `dial.html` | **Dial** | One control you never look at | Central rotary wheel: drag around = volume, tap center = play/pause, flick left/right = prev/next; sleep timer winds the outer ring as a countdown arc. Minimal everything else. Bricolage Grotesque. |
 
-## Feedback loop
+## Archived selector
 
-Selector page (`index.html`) → user picks one + comments →
-`POST /api/feedback` (Vercel function) → GitHub issue comment on
-tejasnafde/macremote (agent polls) + Discord echo. Buttons: "Send feedback"
-(iterate) and "Proceed with this design" (implementation greenlight).
+The selector remains as a record of the design exploration. Its temporary
+public feedback relay and submission controls were removed after Deck was
+selected.

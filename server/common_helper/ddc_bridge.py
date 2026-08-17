@@ -38,6 +38,7 @@ def run_m1ddc(args: list[str]) -> str:
                 capture_output=True,
                 timeout=5,
                 text=True,
+                check=False,
             )
     except subprocess.TimeoutExpired as exc:
         raise DDCError(f"m1ddc timed out after 5s running: {args!r}") from exc

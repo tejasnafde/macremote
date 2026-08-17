@@ -43,6 +43,7 @@ def _run_osascript(script: str) -> str | None:
                 capture_output=True,
                 timeout=5,
                 text=True,
+                check=False,
             )
     except (subprocess.TimeoutExpired, OSError):
         return None

@@ -76,6 +76,57 @@ def test_screens_on_without_prior_blackout_uses_defaults(client, fake_hs, fake_m
     assert any("min(100, 60)" in c for c in fake_hs.calls)
 
 
+def test_repeated_blackout_keeps_the_original_snapshot(client, fake_hs, fake_m1ddc):
+    import handler.system_handler as sh
+
+    sh._blackout_snapshot = None
+    fake_hs.set_output("55")
+    client.post("/system/blackout", headers=AUTH_HEADERS)
+    fake_hs.set_output("0")
+    client.post("/system/blackout", headers=AUTH_HEADERS)
+    fake_hs.calls.clear()
+
+    client.post("/system/screens-on", headers=AUTH_HEADERS)
+
+    assert any("min(100, 55)" in call for call in fake_hs.calls)
+
+
+def test_screens_on_preserves_legitimate_zero_values(client, fake_hs, fake_m1ddc):
+    import handler.system_handler as sh
+
+    sh._blackout_snapshot = None
+    fake_hs.set_output("0")
+    client.post("/system/blackout", headers=AUTH_HEADERS)
+    fake_hs.calls.clear()
+
+    client.post("/system/screens-on", headers=AUTH_HEADERS)
+
+    assert any("min(100, 0)" in call for call in fake_hs.calls)
+    assert not any("min(100, 40)" in call or "min(100, 60)" in call for call in fake_hs.calls)
+
+
+def test_blackout_uses_gamma_for_default_external_display_and_restores_it(
+    client, fake_hs, fake_m1ddc, gamma_levels
+):
+    import handler.system_handler as sh
+
+    sh._blackout_snapshot = None
+    fake_hs.set_output("50")
+    fake_m1ddc.set_response(
+        "display list",
+        "[2] LG ULTRAGEAR (13D61039-774A-93BC-0857-D6964E3302DB)\n",
+    )
+    gamma_levels["LG ULTRAGEAR"] = 33
+
+    client.post("/system/blackout", headers=AUTH_HEADERS)
+    assert any("setGamma" in call and "local l = 0/100" in call for call in fake_hs.calls)
+    assert not any("set luminance 0" in call for call in fake_m1ddc.calls)
+
+    fake_hs.calls.clear()
+    client.post("/system/screens-on", headers=AUTH_HEADERS)
+    assert any("setGamma" in call and "local l = 33/100" in call for call in fake_hs.calls)
+
+
 def test_displays_hides_phantom_null_entry(client, fake_hs, fake_m1ddc):
     fake_m1ddc.set_response("display list", "[1] (null) (id 5)\n[2] LG ULTRAGEAR (id 7)\n")
     fake_hs.set_output("50")

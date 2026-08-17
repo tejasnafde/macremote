@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -30,7 +30,7 @@ class DevFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         color = ANSI.get(record.levelname, "")
         reset = ANSI["RESET"]
-        time = datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-3]
+        time = datetime.now(UTC).strftime("%H:%M:%S.%f")[:-3]
         return self.FMT.format(
             color=color,
             reset=reset,
@@ -48,7 +48,7 @@ class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict = {
             "level":     record.levelname,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "module":    record.module,
             "line":      record.lineno,
             "message":   record.getMessage(),

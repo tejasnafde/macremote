@@ -5,7 +5,8 @@ from fastapi.testclient import TestClient
 
 from config.settings import settings
 
-AUTH_HEADERS = {"Authorization": "Bearer test-token"}
+TEST_API_TOKEN = "test-token-with-at-least-thirty-two-characters"
+AUTH_HEADERS = {"Authorization": f"Bearer {TEST_API_TOKEN}"}
 
 
 @pytest.fixture
@@ -198,6 +199,14 @@ def display_methods(monkeypatch):
     return fresh
 
 
+@pytest.fixture(autouse=True)
+def blackout_snapshot(monkeypatch):
+    """Blackout restoration state is process-global; isolate it per test."""
+    from handler import system_handler
+
+    monkeypatch.setattr(system_handler, "_blackout_snapshot", None)
+
+
 @pytest.fixture
 def browser_registry(monkeypatch):
     """A fresh BrowserSessionRegistry with a fake, test-controlled clock so
@@ -227,7 +236,7 @@ def browser_registry(monkeypatch):
 def client(monkeypatch):
     """TestClient with test-safe settings applied before the app's lifespan runs
     (so startup's Discord lifecycle post never hits a real webhook)."""
-    monkeypatch.setattr(settings, "API_TOKEN", "test-token")
+    monkeypatch.setattr(settings, "API_TOKEN", TEST_API_TOKEN)
     monkeypatch.setattr(settings, "DISCORD_WEBHOOK_URL", "")
 
     from main import app

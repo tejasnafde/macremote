@@ -75,7 +75,7 @@ async def report(body: ReportBody) -> dict:
 
 
 @router.get("/commands")
-async def get_commands(browser: BrowserName = Query(...)) -> dict:
+async def get_commands(browser: BrowserName = Query(...)) -> dict:  # noqa: B008 - FastAPI declaration
     return {"commands": browser_sessions.registry.drain_commands(browser)}
 
 
@@ -168,23 +168,32 @@ async def fullscreen_tab(tab_id: int, body: BrowserBody) -> dict:
     if known and known["active"] is None:
         return {"ok": False, "note": "Reload the macremote browser extension to use fullscreen"}
 
-    # Take the clock reading BEFORE queueing, so only a report that lands after
-    # this point can satisfy the ack.
-    since = browser_sessions.registry.now()
-    browser_sessions.registry.enqueue_command(body.browser, tab_id, "focus")
-
-    bundle = _BROWSER_BUNDLE.get(body.browser)
-    if bundle:
-        try:
-            # This returns "not-running" when the browser is not up. Believe it:
-            # otherwise the waiter would time out and, previously, still fire a
-            # stray "f" at the frontmost app.
-            raised = await asyncio.to_thread(run_hs, lua.raise_app_if_running(bundle))
-            if (raised or "").strip() == "not-running":
-                return {"ok": False, "note": f"{body.browser} is not running"}
-        except HSError:
-            pass
-
+    # Claim the key before the first await. FastAPI can interleave another
+    # request while the browser-raise thread runs; claiming it afterward let
+    # both callers enqueue waiters and send two toggling "f" keystrokes.
     _fullscreen_pending.add(key)
-    _spawn(_fullscreen_after_switch(body.browser, tab_id, since))
-    return {"ok": True, "note": "fullscreen requested"}
+    waiter_started = False
+    try:
+        # Take the clock reading BEFORE queueing, so only a report that lands
+        # after this point can satisfy the ack.
+        since = browser_sessions.registry.now()
+        browser_sessions.registry.enqueue_command(body.browser, tab_id, "focus")
+
+        bundle = _BROWSER_BUNDLE.get(body.browser)
+        if bundle:
+            try:
+                # This returns "not-running" when the browser is not up.
+                raised = await asyncio.to_thread(
+                    run_hs, lua.raise_app_if_running(bundle)
+                )
+                if (raised or "").strip() == "not-running":
+                    return {"ok": False, "note": f"{body.browser} is not running"}
+            except HSError:
+                pass
+
+        _spawn(_fullscreen_after_switch(body.browser, tab_id, since))
+        waiter_started = True
+        return {"ok": True, "note": "fullscreen requested"}
+    finally:
+        if not waiter_started:
+            _fullscreen_pending.discard(key)

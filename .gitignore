@@ -13,11 +13,13 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Node / Expo / Android
+# Node / Android
 node_modules/
 .expo/
-app/android/
 app/ios/
+app/android/.gradle/
+app/android/local.properties
+app/android/**/build/
 *.apk
 *.aab
 

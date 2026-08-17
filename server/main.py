@@ -9,10 +9,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app_util.log_util import errorlogger, infologger
+from common_helper.auth import validate_api_token
 from common_helper.ddc_bridge import DDCError
 from common_helper.discord_alert import alert, send_lifecycle
 from common_helper.hs_bridge import HSError
 from common_helper.version import get_version
+from config.settings import settings
 from handler.sleep_timer_handler import sleep_timer_service
 from routers import (
     apps,
@@ -20,7 +22,6 @@ from routers import (
     brightness,
     browser,
     displays,
-    input as input_router,
     media,
     meta,
     sleep_timer,
@@ -29,10 +30,14 @@ from routers import (
     volume,
     windows,
 )
+from routers import (
+    input as input_router,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_api_token(settings.API_TOKEN)
     version = get_version()
     infologger.info(f"macremote server online v{version}")
     send_lifecycle(f"server online v{version}")

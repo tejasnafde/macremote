@@ -7,8 +7,8 @@ all degrade to brightness: null (or an empty external list), never a 5xx."""
 import asyncio
 
 from common_helper import lua_snippets as lua
-from common_helper.decorators import log_timing
 from common_helper.ddc_bridge import DDCError, parse_display_list, run_m1ddc
+from common_helper.decorators import log_timing
 from common_helper.hs_bridge import HSError, run_hs
 from handler import brightness_handler
 

@@ -1,4 +1,7 @@
+import asyncio
 import time
+
+import pytest
 
 from tests.conftest import AUTH_HEADERS
 
@@ -319,6 +322,42 @@ def test_fullscreen_second_tap_does_not_double_toggle(client, fake_hs, browser_r
     assert _wait_for_f(fake_hs)
     time.sleep(0.4)
     assert sum(1 for c in fake_hs.calls if "keyStroke" in c and '"f"' in c) == 1
+
+
+@pytest.mark.asyncio
+async def test_fullscreen_pending_marker_is_atomic_before_first_await(monkeypatch, browser_registry):
+    from routers import browser as browser_router
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    spawned = []
+
+    async def delayed_to_thread(*_args, **_kwargs):
+        entered.set()
+        await release.wait()
+        return "ok"
+
+    def capture_spawn(coro):
+        spawned.append(coro)
+
+    monkeypatch.setattr(browser_router.asyncio, "to_thread", delayed_to_thread)
+    monkeypatch.setattr(browser_router, "_spawn", capture_spawn)
+    browser_router._fullscreen_pending.clear()
+    body = browser_router.BrowserBody(browser="firefox")
+
+    first = asyncio.create_task(browser_router.fullscreen_tab(7, body))
+    await entered.wait()
+    second = await browser_router.fullscreen_tab(7, body)
+    release.set()
+    first_result = await first
+
+    assert first_result["note"] == "fullscreen requested"
+    assert second["note"] == "fullscreen already pending"
+    commands = browser_registry.drain_commands("firefox")
+    assert [command["action"] for command in commands] == ["focus"]
+    for coro in spawned:
+        coro.close()
+    browser_router._fullscreen_pending.clear()
 
 
 def test_fullscreen_tab_requires_auth(client, fake_hs):

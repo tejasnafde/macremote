@@ -3,7 +3,7 @@ never raises, even if the webhook call itself fails (bad URL, network down, etc.
 
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -43,7 +43,7 @@ async def _post(embed: dict) -> None:
                 settings.DISCORD_WEBHOOK_URL,
                 json={"username": "macremote", "embeds": [embed]},
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - alert delivery must never affect requests
         errorlogger.error(f"discord_alert | delivery failed | {exc}")
 
 
@@ -67,7 +67,7 @@ def alert(title: str, description: str = "", color: int = 0xE53E3E, throttle: bo
         "title": title,
         "description": description[:3900] if description else "",
         "color": color,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
     try:
@@ -77,7 +77,7 @@ def alert(title: str, description: str = "", color: int = 0xE53E3E, throttle: bo
         # No running event loop (e.g. called from sync code/tests) - best effort, still safe.
         try:
             asyncio.run(_post(embed))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - sync fallback has the same no-raise contract
             errorlogger.error(f"discord_alert | delivery failed | {exc}")
 
 

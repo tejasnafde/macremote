@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:padding="8dp">
+    <ImageButton android:id="@+id/widget_previous" style="@style/WidgetButton" android:contentDescription="@string/previous" android:src="@android:drawable/ic_media_previous" />
+    <ImageButton android:id="@+id/widget_play" style="@style/WidgetButtonPrimary" android:contentDescription="@string/play_or_pause" android:src="@android:drawable/ic_media_play" />
+    <ImageButton android:id="@+id/widget_next" style="@style/WidgetButton" android:contentDescription="@string/next" android:src="@android:drawable/ic_media_next" />
+    <ImageButton android:id="@+id/widget_volume_down" style="@style/WidgetButton" android:contentDescription="@string/volume_down" android:src="@drawable/ic_volume_down" />
+    <ImageButton android:id="@+id/widget_volume_up" style="@style/WidgetButton" android:contentDescription="@string/volume_up" android:src="@drawable/ic_volume_up" />
+</LinearLayout>

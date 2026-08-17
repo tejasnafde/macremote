@@ -6,7 +6,7 @@ a fall-asleep-to-music sleep timer — over your own Tailscale network.
 No cloud. No accounts. No cost.
 
 ```text
-Android (Expo RN app + widget)
+Native Android app + widget (Kotlin / Jetpack Compose)
         │  HTTP + bearer token · Tailscale (anywhere) or LAN
         ▼
 FastAPI on the Mac — launchd-managed, self-updating, Discord-alerting
@@ -77,8 +77,8 @@ token is defense-in-depth.
 cd server && uv sync && uv run pytest          # server tests (Hammerspoon shimmed)
 APP_ENV=dev uv run uvicorn main:app --reload   # dev server
 scripts/e2e_mac.sh                             # real end-to-end on your Mac
-cd app && npm install && npm run typecheck     # app
-scripts/ship.sh 0.2.0                          # release: tag → CI → APK → Discord
+cd app/android && ./gradlew testDebugUnitTest lintDebug assembleRelease
+scripts/ship.sh 0.5.0                          # release: tag → CI → signed APK → Discord
 ```
 
 Design & plan: [`docs/plans/`](docs/plans/). Ops conventions: [`CLAUDE.md`](CLAUDE.md).

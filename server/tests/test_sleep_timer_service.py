@@ -139,3 +139,51 @@ async def test_starting_a_new_timer_cancels_the_previous_one():
 
     service.cancel()
     await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_previous_task_cannot_clear_replacement_deadline():
+    service = SleepTimerService(
+        sleep_fn=asyncio.sleep,
+        run_hs_fn=lambda lua: "50",
+        alert_fn=lambda msg: None,
+    )
+    service.start(minutes=10)
+    first_task = service._task
+    service.start(minutes=20)
+    replacement = service._task
+
+    await asyncio.sleep(0)
+
+    assert first_task is not replacement
+    assert service._task is replacement
+    assert service.remaining_seconds() is not None
+    assert service.remaining_seconds() > 19 * 60
+    service.cancel()
+    await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_fade_restores_original_volume():
+    hs_calls = []
+    fade_started = asyncio.Event()
+    hold_fade = asyncio.Event()
+
+    async def controlled_sleep(_seconds):
+        if any("outputVolume() -" in call for call in hs_calls):
+            fade_started.set()
+            await hold_fade.wait()
+
+    service = SleepTimerService(
+        sleep_fn=controlled_sleep,
+        run_hs_fn=make_fake_run_hs(hs_calls),
+        alert_fn=lambda msg: None,
+    )
+    service.start(minutes=1)
+    await asyncio.wait_for(fade_started.wait(), timeout=1)
+
+    service.cancel()
+    await asyncio.sleep(0.05)
+
+    restore_calls = [c for c in hs_calls if "setOutputVolume(math.max(0, math.min(100, 62)))" in c]
+    assert len(restore_calls) == 1

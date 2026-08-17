@@ -11,14 +11,23 @@ LOGDIR="$HOME/Library/Logs/macremote"
 echo "==> macremote install from $REPO"
 mkdir -p "$AGENTS" "$LOGDIR"
 
-# 1. Python deps
-(cd "$REPO/server" && "$UV" sync)
-
-# 2. .env sanity
+# 1. .env sanity
 if [ ! -f "$REPO/server/.env" ]; then
   echo "!! server/.env missing — copy server/.env.example and fill it in." >&2
   exit 1
 fi
+TOKEN_LINE="$(grep -m1 '^API_TOKEN=' "$REPO/server/.env" 2>/dev/null || true)"
+API_TOKEN_VALUE="${TOKEN_LINE#API_TOKEN=}"
+# Trim surrounding whitespace without echoing the secret.
+API_TOKEN_VALUE="${API_TOKEN_VALUE#"${API_TOKEN_VALUE%%[![:space:]]*}"}"
+API_TOKEN_VALUE="${API_TOKEN_VALUE%"${API_TOKEN_VALUE##*[![:space:]]}"}"
+if [ "${#API_TOKEN_VALUE}" -lt 32 ] || [ "$API_TOKEN_VALUE" = "change-me-to-a-long-random-token" ]; then
+  echo "!! API_TOKEN must be a non-placeholder random token of at least 32 characters." >&2
+  exit 1
+fi
+
+# 2. Python deps
+(cd "$REPO/server" && "$UV" sync)
 
 # 3. Hammerspoon config: load our module (idempotent)
 mkdir -p "$HOME/.hammerspoon"

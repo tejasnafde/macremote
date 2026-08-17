@@ -51,7 +51,7 @@ class SleepTimerService:
         self._mode = mode
         total_seconds = minutes * 60
         self._deadline = time.monotonic() + total_seconds
-        self._task = asyncio.create_task(self._run(total_seconds))
+        self._task = asyncio.create_task(self._run(total_seconds, mode))
 
     def cancel(self) -> bool:
         """Cancel any in-flight timer. Returns True if one was actually running."""
@@ -62,7 +62,10 @@ class SleepTimerService:
         self._deadline = None
         return was_active
 
-    async def _run(self, total_seconds: int) -> None:
+    async def _run(self, total_seconds: int, mode: str) -> None:
+        owner = asyncio.current_task()
+        orig_volume: int | None = None
+        fade_started = False
         try:
             fade_window = min(FADE_WINDOW_SECONDS, total_seconds)
             pre_fade = total_seconds - fade_window
@@ -70,7 +73,6 @@ class SleepTimerService:
                 await self._sleep(pre_fade)
 
             # Remember the pre-fade volume so we can restore it before sleeping.
-            orig_volume: int | None = None
             try:
                 raw = await asyncio.to_thread(self._run_hs, lua.VOLUME_GET)
                 orig_volume = int(float(raw))
@@ -81,6 +83,7 @@ class SleepTimerService:
             for _ in range(FADE_STEPS):
                 try:
                     await asyncio.to_thread(self._run_hs, lua.volume_down(FADE_STEP_PERCENT))
+                    fade_started = True
                 except HSError as exc:
                     errorlogger.error(f"sleep_timer | fade step failed | {exc}")
                 if step_interval:
@@ -104,7 +107,7 @@ class SleepTimerService:
             except HSError as exc:
                 errorlogger.error(f"sleep_timer | media pause failed | {exc}")
 
-            if self._mode == "blackout":
+            if mode == "blackout":
                 # Volume 0 + all screens dark; the Mac stays awake, so no
                 # volume restore (volume 0 is the point).
                 try:
@@ -114,7 +117,7 @@ class SleepTimerService:
 
                         blackout = system_blackout
                     await blackout()
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - injected blackout failures must not kill the timer
                     errorlogger.error(f"sleep_timer | blackout failed | {exc}")
                 infologger.info("sleep_timer | fired (blackout)")
                 self._alert("sleep timer fired: volume and screens to zero")
@@ -135,10 +138,24 @@ class SleepTimerService:
             infologger.info("sleep_timer | fired")
             self._alert("sleep timer fired")
         except asyncio.CancelledError:
+            if fade_started and orig_volume is not None:
+                try:
+                    await asyncio.shield(
+                        asyncio.to_thread(self._run_hs, lua.volume_set(orig_volume))
+                    )
+                except HSError as exc:
+                    errorlogger.error(
+                        f"sleep_timer | cancelled volume restore failed | {exc}"
+                    )
             infologger.info("sleep_timer | cancelled")
             raise
         finally:
-            self._deadline = None
+            # A cancelled timer may finish after start() has installed its
+            # replacement. Only the task that still owns the shared slot may
+            # clear that replacement's state.
+            if self._task is owner:
+                self._task = None
+                self._deadline = None
 
 
 sleep_timer_service = SleepTimerService()

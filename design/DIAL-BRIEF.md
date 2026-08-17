@@ -39,6 +39,6 @@ chrome (a faint status strip) that it reads as part of the app, not a floating
 widget. Include a tiny note when a display is software-dimmed (gamma) vs
 hardware, since that is real.
 
-Deploy: these get added to the existing design/ Vercel site; index.html becomes
-a 3-way selector reusing the feedback POST (/api/feedback) so the user can pick
-+ comment from the phone.
+Deploy: these were added to the existing design/Vercel site as a three-way
+selector. The retired feedback relay and submission controls were removed once
+the Deck direction was selected.

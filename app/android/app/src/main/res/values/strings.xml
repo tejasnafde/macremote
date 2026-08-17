@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">macremote</string>
+    <string name="widget_description">Media and volume controls for your Mac</string>
+    <string name="previous">Previous</string>
+    <string name="play_or_pause">Play or pause</string>
+    <string name="next">Next</string>
+    <string name="volume_down">Volume down</string>
+    <string name="volume_up">Volume up</string>
+    <style name="WidgetButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginLeft">3dp</item>
+        <item name="android:layout_marginRight">3dp</item>
+        <item name="android:background">@drawable/widget_button</item>
+        <item name="android:tint">#F3F5F1</item>
+        <item name="android:padding">13dp</item>
+    </style>
+    <style name="WidgetButtonPrimary" parent="WidgetButton">
+        <item name="android:background">@drawable/widget_button_primary</item>
+        <item name="android:tint">#04140B</item>
+    </style>
+</resources>

@@ -1,3 +1,6 @@
+import pytest
+
+from common_helper.auth import validate_api_token
 from tests.conftest import AUTH_HEADERS
 
 
@@ -24,3 +27,16 @@ def test_protected_endpoint_with_wrong_token_is_401(client):
 def test_protected_endpoint_with_correct_token_is_200(client, fake_hs):
     resp = client.post("/media/playpause", headers=AUTH_HEADERS)
     assert resp.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "token",
+    ["", "   ", "change-me-to-a-long-random-token", "changeme", "short-token"],
+)
+def test_server_rejects_empty_placeholder_or_weak_configured_tokens(token):
+    with pytest.raises(RuntimeError, match="API_TOKEN"):
+        validate_api_token(token)
+
+
+def test_server_accepts_a_strong_configured_token():
+    assert validate_api_token("a-secure-random-token-that-is-long-enough") is None

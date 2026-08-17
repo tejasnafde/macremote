@@ -111,31 +111,10 @@
     </div>
   </div>
 
-  <label class="field-label" for="msg">Comments</label>
-  <textarea id="msg" placeholder="What you liked, what felt off, anything you'd change."></textarea>
-
-  <div class="actions">
-    <button class="btn btn-send" id="send">Send</button>
-    <button class="btn btn-proceed" id="proceed">Proceed</button>
-  </div>
-  <p class="err" id="err">Could not send, try again?</p>
-  <p class="note">Pick a favorite (or don't) and send a comment any time. Proceed tells me you're ready to move forward with the selected one.</p>
-</div>
-
-<div class="done wrap" id="done">
-  <div class="big">&check;</div>
-  <h3>Got it.</h3>
-  <p>Reply is coming to Discord.</p>
+  <p class="note">These are archived design explorations. The shipped app uses the Deck direction.</p>
 </div>
 
 <script>
-var names = { radial: "Radial", arc: "Arc", stack: "Stack" };
-
-function selectedId(){
-  var r = document.querySelector('input[name="dial"]:checked');
-  return r ? r.value : null;
-}
-
 document.querySelectorAll('.card input[type="radio"]').forEach(function(input){
   input.addEventListener("change", function(){
     document.querySelectorAll(".card").forEach(function(c){
@@ -143,46 +122,6 @@ document.querySelectorAll('.card input[type="radio"]').forEach(function(input){
     });
   });
 });
-
-async function submit(action){
-  var selected = selectedId();
-  var msg = document.getElementById("msg").value.trim();
-
-  if (action === "proceed" && !selected){
-    alert("Pick a dial first.");
-    return;
-  }
-  if (action === "feedback" && !selected && !msg){
-    alert("Pick a dial or write something first.");
-    return;
-  }
-
-  var label = selected ? names[selected] + " (" + selected + ")" : "no selection";
-  var comments = (action === "proceed" ? "Proceed: " : "Feedback: ") + label +
-    (msg ? "\n\n" + msg : "");
-
-  var sendBtn = document.getElementById("send");
-  var proceedBtn = document.getElementById("proceed");
-  sendBtn.disabled = true; proceedBtn.disabled = true;
-  document.getElementById("err").style.display = "none";
-
-  try{
-    var r = await fetch("/api/feedback", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: action, selected: selected, comments: comments })
-    });
-    if (!r.ok) throw new Error(await r.text());
-    document.getElementById("main").style.display = "none";
-    document.getElementById("done").style.display = "block";
-  }catch(e){
-    document.getElementById("err").style.display = "block";
-    sendBtn.disabled = false; proceedBtn.disabled = false;
-  }
-}
-
-document.getElementById("send").onclick = function(){ submit("feedback"); };
-document.getElementById("proceed").onclick = function(){ submit("proceed"); };
 </script>
 </body>
 </html>

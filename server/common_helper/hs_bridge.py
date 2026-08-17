@@ -53,6 +53,7 @@ def _invoke(lua: str) -> subprocess.CompletedProcess:
             capture_output=True,
             timeout=5,
             text=True,
+            check=False,
         )
 
 

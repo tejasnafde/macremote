@@ -1,4 +1,9 @@
-# macremote — Implementation Plan (single source of truth)
+# macremote — Historical Expo Implementation Plan
+
+> Superseded for the Android client by
+> [`2026-08-18-native-android-migration-design.md`](2026-08-18-native-android-migration-design.md).
+> The server history below remains useful context; current Android commands and
+> release gates live in the README and CI workflows.
 
 Rules for any agent working this plan:
 - Work the first unchecked task. Check it off IN THE SAME COMMIT as the code.
