@@ -19,6 +19,17 @@ object LegacyMigration {
         return DevicesState(listOf(device), device.id)
     }
 
+    fun decodeBrightnessTargets(raw: String?, occupiedDeviceIds: Set<String>): Map<String, String> = runCatching {
+        if (raw.isNullOrBlank()) return@runCatching emptyMap()
+        val root = JSONObject(raw)
+        buildMap {
+            root.keys().forEach { id ->
+                val target = root.optString(id).trim()
+                if (id !in occupiedDeviceIds && target.isNotBlank()) put(id, target)
+            }
+        }
+    }.getOrDefault(emptyMap())
+
     private fun decodeDevices(raw: String?): DevicesState? = runCatching {
         if (raw.isNullOrBlank()) return@runCatching null
         val root = JSONObject(raw)

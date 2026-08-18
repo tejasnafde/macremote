@@ -17,14 +17,34 @@ class AbsolutePlaybackGateTest {
 
     @Test fun `failed transition restores state only when no newer intent replaced it`() {
         val gate = AbsolutePlaybackGate()
-        gate.observe(true)
-        val pause = gate.begin(false)!!
-        val play = gate.begin(true)!!
+        gate.observe(true, nowMs = 1_000)
+        val pause = gate.begin(false, nowMs = 1_100)!!
+        val play = gate.begin(true, nowMs = 1_200)!!
 
         gate.failed(pause)
         assertEquals(true, gate.current)
 
         gate.failed(play)
         assertEquals(false, gate.current)
+    }
+
+    @Test fun `stale poll cannot replace a newer local playback intent`() {
+        val gate = AbsolutePlaybackGate()
+        gate.observe(true, nowMs = 1_000)
+        gate.begin(false, nowMs = 1_100)
+
+        gate.observe(true, nowMs = 1_200)
+
+        assertEquals(false, gate.current)
+    }
+
+    @Test fun `server truth wins after the optimistic transition timeout`() {
+        val gate = AbsolutePlaybackGate()
+        gate.observe(true, nowMs = 1_000)
+        gate.begin(false, nowMs = 1_100)
+
+        gate.observe(true, nowMs = 7_000)
+
+        assertEquals(true, gate.current)
     }
 }

@@ -54,6 +54,13 @@ class MediaTargetSelectorTest {
         assertNull(MediaTargetSelector.select(status(tabs = listOf(blocked)), null, 0, nowMs = 1_000))
     }
 
+    @Test
+    fun `older extension tabs remain controllable when capability is absent`() {
+        val legacy = tab.copy(controllable = null, volume = null)
+
+        assertEquals(legacy, MediaTargetSelector.select(status(tabs = listOf(legacy)), null, 0, nowMs = 1_000))
+    }
+
     private fun status(
         nowPlaying: NowPlaying? = null,
         tabs: List<BrowserTab>,

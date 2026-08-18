@@ -7,7 +7,6 @@ from fastapi import Header, HTTPException, status
 
 from config.settings import settings
 
-MIN_TOKEN_LENGTH = 32
 PLACEHOLDER_TOKENS = {
     "change-me-to-a-long-random-token",
     "change-me",
@@ -17,13 +16,10 @@ PLACEHOLDER_TOKENS = {
 
 
 def validate_api_token(token: str) -> None:
-    """Refuse to run with a token that can be guessed or matched by empty input."""
+    """Reject unsafe defaults without breaking existing non-placeholder installs."""
     clean = token.strip()
-    if len(clean) < MIN_TOKEN_LENGTH or clean.lower() in PLACEHOLDER_TOKENS:
-        raise RuntimeError(
-            "API_TOKEN must be a non-placeholder random token of at least "
-            f"{MIN_TOKEN_LENGTH} characters"
-        )
+    if not clean or clean.lower() in PLACEHOLDER_TOKENS:
+        raise RuntimeError("API_TOKEN must be set to a non-placeholder random token")
 
 
 async def require_bearer_token(authorization: str | None = Header(default=None)) -> None:

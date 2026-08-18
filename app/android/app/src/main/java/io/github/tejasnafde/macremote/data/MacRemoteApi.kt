@@ -72,10 +72,13 @@ class MacRemoteApi {
         body = JSONObject().put("action", action).put("browser", tab.browser).apply { value?.let { put("value", it) } },
     )
 
-    suspend fun tabFullscreen(device: Device, tab: BrowserTab) = unit(
-        device,
-        "/browser/tabs/${tab.tabId}/fullscreen",
-        body = JSONObject().put("browser", tab.browser),
+    suspend fun tabFullscreen(device: Device, tab: BrowserTab): FullscreenResult = FullscreenResultCodec.decode(
+        request(
+            device,
+            "/browser/tabs/${tab.tabId}/fullscreen",
+            method = "POST",
+            body = JSONObject().put("browser", tab.browser),
+        ),
     )
 
     suspend fun inputScroll(device: Device, dx: Int, dy: Int) = unit(

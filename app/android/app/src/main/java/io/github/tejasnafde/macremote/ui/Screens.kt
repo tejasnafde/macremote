@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Mouse
+import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -491,6 +492,7 @@ fun RemoteScreen(state: MacRemoteUiState, viewModel: MacRemoteViewModel, padding
 
     if (timerSheet) TimerSheet(
         remaining = status?.sleepTimer?.remainingSeconds,
+        currentMode = status?.sleepTimer?.mode,
         viewModel = viewModel,
         onSleepNow = { timerSheet = false; confirmAction = RemoteAction.Sleep },
         onDismiss = { timerSheet = false },
@@ -635,28 +637,54 @@ private fun BrightnessCard(
 @Composable
 private fun TimerSheet(
     remaining: Int?,
+    currentMode: SleepMode?,
     viewModel: MacRemoteViewModel,
     onSleepNow: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var minutes by remember { mutableIntStateOf(30) }
-    var mode by remember { mutableStateOf(SleepMode.Sleep) }
+    var selection by remember {
+        mutableStateOf(SleepTimerSelection(minutes = remaining?.let { ((it + 59) / 60).coerceIn(5, 180) } ?: 60))
+    }
+    var mode by remember { mutableStateOf(currentMode ?: SleepMode.Sleep) }
+    var editing by remember { mutableStateOf(false) }
+    var displayedRemaining by remember { mutableIntStateOf(remaining ?: 0) }
+    LaunchedEffect(remaining) {
+        displayedRemaining = remaining ?: 0
+        while (displayedRemaining > 0) {
+            delay(1_000)
+            displayedRemaining = (displayedRemaining - 1).coerceAtLeast(0)
+        }
+    }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MacColors.Ink850) {
         Column(Modifier.padding(horizontal = 22.dp).padding(bottom = 36.dp)) {
             Text("Sleep timer", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.height(8.dp))
             Text("Fade the volume during the final minute, then finish quietly.", color = MacColors.Off55)
             Spacer(Modifier.height(22.dp))
-            if (remaining != null) {
-                Text(formatDuration(remaining), style = MaterialTheme.typography.displaySmall, color = MacColors.Green)
+            if (remaining != null && !editing) {
+                Text(formatDuration(displayedRemaining), style = MaterialTheme.typography.displaySmall, color = MacColors.Green)
                 Spacer(Modifier.height(16.dp))
                 OutlinedButton(onClick = { viewModel.cancelSleepTimer(); onDismiss() }, modifier = Modifier.fillMaxWidth()) { Text("Cancel timer") }
+                OutlinedButton(onClick = { editing = true }, modifier = Modifier.fillMaxWidth()) { Text("Change timer") }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(15, 30, 45, 60).forEach { value ->
-                        FilledTonalButton(onClick = { minutes = value }, colors = ButtonDefaults.filledTonalButtonColors(containerColor = if (minutes == value) MacColors.Green.copy(alpha = .25f) else MacColors.Ink700)) {
+                    SleepTimerSelection.presets.forEach { value ->
+                        FilledTonalButton(onClick = { selection = selection.choosePreset(value) }, colors = ButtonDefaults.filledTonalButtonColors(containerColor = if (!selection.custom && selection.minutes == value) MacColors.Green.copy(alpha = .25f) else MacColors.Ink700)) {
                             Text("$value min")
                         }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                FilledTonalButton(
+                    onClick = { selection = selection.beginCustom() },
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = if (selection.custom) MacColors.Green.copy(alpha = .25f) else MacColors.Ink700),
+                ) { Text("Custom") }
+                if (selection.custom) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { selection = selection.adjust(-5) }) { Icon(Icons.Rounded.Remove, "Remove five minutes") }
+                        Text("${selection.minutes} min", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 18.dp))
+                        IconButton(onClick = { selection = selection.adjust(5) }) { Icon(Icons.Rounded.Add, "Add five minutes") }
                     }
                 }
                 Spacer(Modifier.height(14.dp))
@@ -665,8 +693,8 @@ private fun TimerSheet(
                     FilledTonalButton(onClick = { mode = SleepMode.Blackout }) { Icon(Icons.Rounded.Visibility, null); Spacer(Modifier.width(7.dp)); Text("Blackout") }
                 }
                 Spacer(Modifier.height(20.dp))
-                Button(onClick = { viewModel.setSleepTimer(minutes, mode); onDismiss() }, modifier = Modifier.fillMaxWidth().height(54.dp)) {
-                    Text("Arm $minutes minute timer")
+                Button(onClick = { viewModel.setSleepTimer(selection.minutes, mode); onDismiss() }, modifier = Modifier.fillMaxWidth().height(54.dp)) {
+                    Text("Arm ${selection.minutes} minute timer")
                 }
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(onClick = onSleepNow, modifier = Modifier.fillMaxWidth()) { Text("Sleep now") }

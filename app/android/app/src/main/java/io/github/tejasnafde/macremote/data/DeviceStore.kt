@@ -48,12 +48,12 @@ class DeviceStore(context: Context) {
         DevicesState(current.devices + device, device.id) to device
     }
 
-    suspend fun update(id: String, name: String, url: String, token: String): Device = mutate { current ->
+    suspend fun updateAndActivate(id: String, name: String, url: String, token: String): Device = mutate { current ->
         val normalized = UrlNormalizer.normalize(url)
         require(UrlNormalizer.isValid(normalized)) { "Enter a valid Mac address" }
         require(token.trim().isNotEmpty()) { "Enter the API token" }
         val updated = Device(id, name.trim().ifBlank { UrlNormalizer.hostname(normalized) }, normalized, token.trim())
-        DevicesState(current.devices.map { if (it.id == id) updated else it }, current.activeId) to updated
+        DeviceStateReducer.replaceAndActivate(current, updated) to updated
     }
 
     suspend fun activate(id: String) = mutateUnit { current ->
@@ -100,11 +100,16 @@ class DeviceStore(context: Context) {
         if (!prefs.contains(READING_MODE_KEY)) {
             prefs.edit().putString(READING_MODE_KEY, legacy.read("macremote:readingPageMode") ?: "arrows").apply()
         }
-        val brightness = legacy.read("macremote:brightnessTarget") ?: return
-        runCatching {
-            val root = org.json.JSONObject(brightness)
+        val occupied = mutableState.value.devices.mapNotNullTo(mutableSetOf()) { device ->
+            device.id.takeIf { prefs.contains("brightness.${device.id}") }
+        }
+        val migrated = LegacyMigration.decodeBrightnessTargets(
+            legacy.read("macremote:brightnessTarget"),
+            occupied,
+        )
+        if (migrated.isNotEmpty()) {
             val edit = prefs.edit()
-            root.keys().forEach { id -> edit.putString("brightness.$id", root.optString(id)) }
+            migrated.forEach { (id, target) -> edit.putString("brightness.$id", target) }
             edit.apply()
         }
     }

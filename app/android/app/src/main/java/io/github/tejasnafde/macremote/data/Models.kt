@@ -34,8 +34,10 @@ data class BrowserTab(
     val controllable: Boolean?,
 ) {
     val key: String get() = "$browser:$tabId"
-    val isDrivable: Boolean get() = controllable ?: (volume != null)
+    val isDrivable: Boolean get() = controllable ?: true
 }
+
+data class FullscreenResult(val ok: Boolean, val note: String?)
 
 data class MacStatus(
     val nowPlaying: NowPlaying?,

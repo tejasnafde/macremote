@@ -7,13 +7,15 @@ import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
 import io.github.tejasnafde.macremote.MacRemoteApplication
+import io.github.tejasnafde.macremote.MainActivity
 import io.github.tejasnafde.macremote.R
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-class MacRemoteWidget : AppWidgetProvider() {
+class RemoteWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         ids.forEach { id -> manager.updateAppWidget(id, views(context)) }
     }
@@ -25,14 +27,28 @@ class MacRemoteWidget : AppWidgetProvider() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val graph = (context.applicationContext as MacRemoteApplication).graph
-                val device = graph.devices.load().activeDevice ?: return@launch
-                when (command) {
-                    WidgetCommand.Previous -> graph.api.previous(device)
-                    WidgetCommand.PlayPause -> graph.api.playPause(device)
-                    WidgetCommand.Next -> graph.api.next(device)
-                    WidgetCommand.VolumeDown -> graph.api.volumeDown(device)
-                    WidgetCommand.VolumeUp -> graph.api.volumeUp(device)
+                val device = graph.devices.load().activeDevice
+                WidgetCommandExecutor.execute(
+                    device,
+                    command,
+                    openSetup = {
+                        context.startActivity(
+                            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    },
+                ) { target, action ->
+                    when (action) {
+                        WidgetCommand.Previous -> graph.api.previous(target)
+                        WidgetCommand.PlayPause -> graph.api.playPause(target)
+                        WidgetCommand.Next -> graph.api.next(target)
+                        WidgetCommand.VolumeDown -> graph.api.volumeDown(target)
+                        WidgetCommand.VolumeUp -> graph.api.volumeUp(target)
+                    }
                 }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Loading migrated state can fail too; keep the host process alive.
             } finally {
                 pending.finish()
             }
@@ -48,7 +64,7 @@ class MacRemoteWidget : AppWidgetProvider() {
     }
 
     private fun RemoteViews.bind(context: Context, viewId: Int, command: WidgetCommand) {
-        val intent = Intent(context, MacRemoteWidget::class.java).setAction(command.action)
+        val intent = Intent(context, RemoteWidget::class.java).setAction(command.action)
         val pending = PendingIntent.getBroadcast(
             context,
             command.ordinal + 1,

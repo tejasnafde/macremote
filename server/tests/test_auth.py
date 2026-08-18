@@ -31,12 +31,13 @@ def test_protected_endpoint_with_correct_token_is_200(client, fake_hs):
 
 @pytest.mark.parametrize(
     "token",
-    ["", "   ", "change-me-to-a-long-random-token", "changeme", "short-token"],
+    ["", "   ", "change-me-to-a-long-random-token", "changeme"],
 )
-def test_server_rejects_empty_placeholder_or_weak_configured_tokens(token):
+def test_server_rejects_empty_or_placeholder_configured_tokens(token):
     with pytest.raises(RuntimeError, match="API_TOKEN"):
         validate_api_token(token)
 
 
-def test_server_accepts_a_strong_configured_token():
-    assert validate_api_token("a-secure-random-token-that-is-long-enough") is None
+@pytest.mark.parametrize("token", ["existing-short-token", "a-secure-random-token-that-is-long-enough"])
+def test_server_accepts_existing_non_placeholder_tokens_during_upgrade(token):
+    assert validate_api_token(token) is None

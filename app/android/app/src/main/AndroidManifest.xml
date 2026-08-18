@@ -30,7 +30,7 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
         <receiver
-            android:name=".widget.MacRemoteWidget"
+            android:name=".widget.RemoteWidget"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

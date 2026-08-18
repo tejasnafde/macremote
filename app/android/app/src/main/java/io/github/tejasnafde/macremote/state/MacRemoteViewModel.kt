@@ -141,7 +141,7 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
             val result = runCatching {
                 val editing = state.value.editingDevice
                 val saved = if (editing == null) graph.devices.add(name, url, token)
-                else graph.devices.update(editing.id, name, url, token)
+                else graph.devices.updateAndActivate(editing.id, name, url, token)
                 val devices = graph.devices.state.value
                 mutableState.update {
                     it.copy(
@@ -329,8 +329,8 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
             }
             RemoteAction.Next -> graph.api.next(device)
             RemoteAction.Previous -> graph.api.previous(device)
-            RemoteAction.SeekBack -> graph.api.seek(device, -10)
-            RemoteAction.SeekForward -> graph.api.seek(device, 10)
+            RemoteAction.SeekBack -> seek(device, -10)
+            RemoteAction.SeekForward -> seek(device, 10)
             RemoteAction.VolumeUp -> graph.api.volumeUp(device)
             RemoteAction.VolumeDown -> graph.api.volumeDown(device)
             RemoteAction.Mute -> graph.api.mute(device)
@@ -352,7 +352,12 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
         graph.api.tabCommand(it, tab, action, value)
     }
 
-    fun tabFullscreen(tab: BrowserTab) = withDevice { graph.api.tabFullscreen(it, tab) }
+    fun tabFullscreen(tab: BrowserTab) = withDevice { device ->
+        val result = graph.api.tabFullscreen(device, tab)
+        if (!result.ok) {
+            mutableState.update { it.copy(message = result.note ?: "Could not enter fullscreen") }
+        }
+    }
 
     fun setReadingMode(mode: String) {
         graph.devices.setReadingMode(mode)
@@ -445,6 +450,20 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
     private fun rememberTab(tab: BrowserTab) {
         rememberedTabKey = tab.key
         rememberedTabAtMs = System.currentTimeMillis()
+    }
+
+    private suspend fun seek(device: Device, seconds: Int) {
+        val tab = MediaTargetSelector.select(
+            state.value.status,
+            rememberedTabKey,
+            rememberedTabAtMs,
+            System.currentTimeMillis(),
+        )
+        if (tab == null) graph.api.seek(device, seconds)
+        else {
+            rememberTab(tab)
+            graph.api.tabCommand(device, tab, "seek", seconds)
+        }
     }
 
     override fun onCleared() {

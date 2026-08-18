@@ -26,4 +26,12 @@ class LegacyMigrationTest {
     @Test fun `ignores incomplete legacy configuration`() {
         assertNull(LegacyMigration.decode(null, "macbook:8484", ""))
     }
+
+    @Test fun `brightness migration only fills targets not already stored natively`() {
+        val raw = """{"dev_a":"builtin","dev_b":"2"}"""
+
+        val migrated = LegacyMigration.decodeBrightnessTargets(raw, occupiedDeviceIds = setOf("dev_a"))
+
+        assertEquals(mapOf("dev_b" to "2"), migrated)
+    }
 }
