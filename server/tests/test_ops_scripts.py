@@ -58,11 +58,20 @@ def test_native_client_preserves_browser_seek_routing_and_timer_parity():
     assert "delay(1_000)" in screens
 
 
-def test_native_widget_keeps_the_v044_component_name():
+def test_native_widget_keeps_the_v044_and_v050_component_names():
     manifest = (ROOT / "app/android/app/src/main/AndroidManifest.xml").read_text()
     widget = (ROOT / "app/android/app/src/main/java/io/github/tejasnafde/macremote/widget/MacRemoteWidget.kt").read_text()
     assert 'android:name=".widget.RemoteWidget"' in manifest
+    assert 'android:name=".widget.MacRemoteWidget"' in manifest
+    assert "class RemoteWidget" in widget
+    assert "class MacRemoteWidget" in widget
     assert "catch (_: Exception)" in widget
+
+
+def test_native_timer_editor_visually_marks_the_current_mode():
+    screens = (ROOT / "app/android/app/src/main/java/io/github/tejasnafde/macremote/ui/Screens.kt").read_text()
+    assert "if (mode == SleepMode.Sleep) MacColors.Green.copy(alpha = .25f)" in screens
+    assert "if (mode == SleepMode.Blackout) MacColors.Green.copy(alpha = .25f)" in screens
 
 
 def test_canonical_launcher_sources_are_restored_exactly():

@@ -17,5 +17,15 @@ data class SleepTimerSelection(
         val presets = listOf(15, 30, 45, 60)
         private const val MIN_MINUTES = 5
         private const val MAX_MINUTES = 180
+
+        fun forEditing(minutes: Int): SleepTimerSelection {
+            val safe = minutes.coerceIn(MIN_MINUTES, MAX_MINUTES)
+            val custom = safe !in presets
+            return SleepTimerSelection(
+                minutes = safe,
+                custom = custom,
+                customMinutes = if (custom) safe else 20,
+            )
+        }
     }
 }

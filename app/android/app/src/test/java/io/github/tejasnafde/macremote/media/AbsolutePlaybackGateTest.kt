@@ -15,7 +15,7 @@ class AbsolutePlaybackGateTest {
         assertEquals(false, gate.current)
     }
 
-    @Test fun `failed transition restores state only when no newer intent replaced it`() {
+    @Test fun `overlapping failed transitions restore the last server-confirmed state`() {
         val gate = AbsolutePlaybackGate()
         gate.observe(true, nowMs = 1_000)
         val pause = gate.begin(false, nowMs = 1_100)!!
@@ -25,7 +25,7 @@ class AbsolutePlaybackGateTest {
         assertEquals(true, gate.current)
 
         gate.failed(play)
-        assertEquals(false, gate.current)
+        assertEquals(true, gate.current)
     }
 
     @Test fun `stale poll cannot replace a newer local playback intent`() {

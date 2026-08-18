@@ -38,6 +38,10 @@ def test_server_rejects_empty_or_placeholder_configured_tokens(token):
         validate_api_token(token)
 
 
-@pytest.mark.parametrize("token", ["existing-short-token", "a-secure-random-token-that-is-long-enough"])
-def test_server_accepts_existing_non_placeholder_tokens_during_upgrade(token):
-    assert validate_api_token(token) is None
+def test_server_rejects_short_configured_token():
+    with pytest.raises(RuntimeError, match="at least 32"):
+        validate_api_token("existing-short-token")
+
+
+def test_server_accepts_secure_random_token():
+    assert validate_api_token("a-secure-random-token-that-is-long-enough") is None

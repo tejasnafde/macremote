@@ -643,7 +643,7 @@ private fun TimerSheet(
     onDismiss: () -> Unit,
 ) {
     var selection by remember {
-        mutableStateOf(SleepTimerSelection(minutes = remaining?.let { ((it + 59) / 60).coerceIn(5, 180) } ?: 60))
+        mutableStateOf(SleepTimerSelection.forEditing(remaining?.let { (it + 59) / 60 } ?: 60))
     }
     var mode by remember { mutableStateOf(currentMode ?: SleepMode.Sleep) }
     var editing by remember { mutableStateOf(false) }
@@ -689,8 +689,18 @@ private fun TimerSheet(
                 }
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = { mode = SleepMode.Sleep }) { Icon(Icons.Rounded.Bedtime, null); Spacer(Modifier.width(7.dp)); Text("Sleep") }
-                    FilledTonalButton(onClick = { mode = SleepMode.Blackout }) { Icon(Icons.Rounded.Visibility, null); Spacer(Modifier.width(7.dp)); Text("Blackout") }
+                    FilledTonalButton(
+                        onClick = { mode = SleepMode.Sleep },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (mode == SleepMode.Sleep) MacColors.Green.copy(alpha = .25f) else MacColors.Ink700,
+                        ),
+                    ) { Icon(Icons.Rounded.Bedtime, null); Spacer(Modifier.width(7.dp)); Text("Sleep") }
+                    FilledTonalButton(
+                        onClick = { mode = SleepMode.Blackout },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (mode == SleepMode.Blackout) MacColors.Green.copy(alpha = .25f) else MacColors.Ink700,
+                        ),
+                    ) { Icon(Icons.Rounded.Visibility, null); Spacer(Modifier.width(7.dp)); Text("Blackout") }
                 }
                 Spacer(Modifier.height(20.dp))
                 Button(onClick = { viewModel.setSleepTimer(selection.minutes, mode); onDismiss() }, modifier = Modifier.fillMaxWidth().height(54.dp)) {

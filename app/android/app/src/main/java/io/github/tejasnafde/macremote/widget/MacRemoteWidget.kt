@@ -15,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-class RemoteWidget : AppWidgetProvider() {
+open class RemoteWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         ids.forEach { id -> manager.updateAppWidget(id, views(context)) }
     }
@@ -74,3 +74,6 @@ class RemoteWidget : AppWidgetProvider() {
         setOnClickPendingIntent(viewId, pending)
     }
 }
+
+/** Compatibility provider for widgets created by the v0.5.0 native preview. */
+class MacRemoteWidget : RemoteWidget()

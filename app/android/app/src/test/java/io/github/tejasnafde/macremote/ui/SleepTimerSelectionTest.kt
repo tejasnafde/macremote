@@ -33,6 +33,20 @@ class SleepTimerSelectionTest {
         assertEquals(false, selected.custom)
     }
 
+    @Test fun `editing a running non-preset duration visibly selects custom`() {
+        val selected = SleepTimerSelection.forEditing(59)
+
+        assertEquals(59, selected.minutes)
+        assertTrue(selected.custom)
+    }
+
+    @Test fun `editing a running preset duration visibly selects that preset`() {
+        val selected = SleepTimerSelection.forEditing(45)
+
+        assertEquals(45, selected.minutes)
+        assertEquals(false, selected.custom)
+    }
+
     @Test fun `custom timer retains the previous three hour ceiling`() {
         val adjusted = SleepTimerSelection(minutes = 175).adjust(30)
 

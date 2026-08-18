@@ -11,9 +11,11 @@ class AbsolutePlaybackGate {
         private set
 
     private var pending: PlaybackTransition? = null
+    private var confirmed: Boolean? = null
 
     @Synchronized
     fun observe(playing: Boolean, nowMs: Long = System.currentTimeMillis()) {
+        confirmed = playing
         val transition = pending
         if (transition != null && playing != transition.to && nowMs - transition.startedAtMs < PENDING_TIMEOUT_MS) return
         current = playing
@@ -33,7 +35,7 @@ class AbsolutePlaybackGate {
     @Synchronized
     fun failed(transition: PlaybackTransition) {
         if (pending === transition && current == transition.to) {
-            current = transition.from
+            current = confirmed ?: transition.from
             pending = null
         }
     }

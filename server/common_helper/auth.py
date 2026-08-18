@@ -16,10 +16,12 @@ PLACEHOLDER_TOKENS = {
 
 
 def validate_api_token(token: str) -> None:
-    """Reject unsafe defaults without breaking existing non-placeholder installs."""
+    """Reject credentials that cannot safely protect privileged Mac controls."""
     clean = token.strip()
     if not clean or clean.lower() in PLACEHOLDER_TOKENS:
         raise RuntimeError("API_TOKEN must be set to a non-placeholder random token")
+    if len(clean) < 32:
+        raise RuntimeError("API_TOKEN must contain at least 32 characters")
 
 
 async def require_bearer_token(authorization: str | None = Header(default=None)) -> None:
