@@ -102,6 +102,7 @@ import io.github.tejasnafde.macremote.state.AppScreen
 import io.github.tejasnafde.macremote.state.MacRemoteUiState
 import io.github.tejasnafde.macremote.state.MacRemoteViewModel
 import io.github.tejasnafde.macremote.state.RemoteAction
+import io.github.tejasnafde.macremote.update.UpdatePresentation
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -290,10 +291,23 @@ fun DevicesScreen(state: MacRemoteUiState, viewModel: MacRemoteViewModel, paddin
                 }
             }
             Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = { viewModel.checkForUpdate() }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Rounded.Refresh, null)
+            val update = UpdatePresentation.create(state.checkingForUpdate, state.latestRelease, state.updateProgress)
+            OutlinedButton(
+                onClick = { viewModel.checkForUpdate() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = update.checkEnabled,
+            ) {
+                if (state.checkingForUpdate) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Rounded.Refresh, null)
+                }
                 Spacer(Modifier.width(8.dp))
-                Text("Check for app update")
+                Text(update.checkLabel)
+            }
+            if (state.latestRelease != null) {
+                Spacer(Modifier.height(10.dp))
+                UpdateAction(state, viewModel)
             }
         }
     }
@@ -358,28 +372,9 @@ fun RemoteScreen(state: MacRemoteUiState, viewModel: MacRemoteViewModel, padding
                 }
             }
         }
-        state.latestRelease?.let { release ->
+        if (state.latestRelease != null) {
             item {
-                TactileSurface(
-                    onClick = viewModel::installUpdate,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = state.updateProgress == null,
-                    color = MacColors.Green.copy(alpha = .14f),
-                    border = BorderStroke(1.dp, MacColors.Green.copy(alpha = .3f)),
-                ) {
-                    if (state.updateProgress != null) {
-                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Text("Downloading ${state.updateProgress}%", Modifier.weight(1f))
-                    } else {
-                        Icon(Icons.Rounded.Refresh, null, tint = MacColors.Green)
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("macremote ${release.version} is ready", style = MaterialTheme.typography.titleMedium)
-                            Text("Tap to download and install", style = MaterialTheme.typography.bodyMedium, color = MacColors.Off55)
-                        }
-                    }
-                }
+                UpdateAction(state, viewModel)
             }
         }
         item {
@@ -618,16 +613,50 @@ private fun BrightnessCard(
                 enabled = state.online && serverBrightness != null,
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                TactileSurface({ viewModel.command(RemoteAction.BrightnessDown) }, Modifier.weight(1f), enabled = state.online) {
+                TactileSurface(
+                    { viewModel.command(RemoteAction.BrightnessDown) },
+                    Modifier.weight(1f),
+                    enabled = state.online && serverBrightness != null,
+                ) {
                     Icon(Icons.Rounded.BrightnessLow, null)
                     Spacer(Modifier.width(8.dp))
                     Text("Dim")
                 }
-                TactileSurface({ viewModel.command(RemoteAction.BrightnessUp) }, Modifier.weight(1f), enabled = state.online) {
+                TactileSurface(
+                    { viewModel.command(RemoteAction.BrightnessUp) },
+                    Modifier.weight(1f),
+                    enabled = state.online && serverBrightness != null,
+                ) {
                     Icon(Icons.Rounded.BrightnessHigh, null)
                     Spacer(Modifier.width(8.dp))
                     Text("Brighten")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateAction(state: MacRemoteUiState, viewModel: MacRemoteViewModel) {
+    val update = UpdatePresentation.create(state.checkingForUpdate, state.latestRelease, state.updateProgress)
+    val label = update.installLabel ?: return
+    TactileSurface(
+        onClick = viewModel::installUpdate,
+        modifier = Modifier.fillMaxWidth(),
+        enabled = update.installEnabled,
+        color = MacColors.Green.copy(alpha = .14f),
+        border = BorderStroke(1.dp, MacColors.Green.copy(alpha = .3f)),
+    ) {
+        if (state.updateProgress != null) {
+            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(label, Modifier.weight(1f))
+        } else {
+            Icon(Icons.Rounded.Refresh, null, tint = MacColors.Green)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.titleMedium)
+                Text("Tap to download and install", style = MaterialTheme.typography.bodyMedium, color = MacColors.Off55)
             }
         }
     }

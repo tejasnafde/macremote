@@ -40,17 +40,24 @@ class MacRemoteApi {
         }
     }
 
-    suspend fun brightnessStep(device: Device, direction: String, display: String?) = unit(
-        device,
-        "/brightness/$direction${display?.let { "?display=${encode(it)}" }.orEmpty()}",
-    )
+    suspend fun brightnessStep(device: Device, direction: String, display: String?): BrightnessResult =
+        BrightnessResultCodec.decode(
+            request(
+                device,
+                "/brightness/$direction${display?.let { "?display=${encode(it)}" }.orEmpty()}",
+                method = "POST",
+            ),
+        )
 
-    suspend fun setBrightness(device: Device, level: Int, display: String) = unit(
-        device,
-        "/brightness",
-        method = "PUT",
-        body = JSONObject().put("level", level.coerceIn(0, 100)).put("display", display),
-    )
+    suspend fun setBrightness(device: Device, level: Int, display: String): BrightnessResult =
+        BrightnessResultCodec.decode(
+            request(
+                device,
+                "/brightness",
+                method = "PUT",
+                body = JSONObject().put("level", level.coerceIn(0, 100)).put("display", display),
+            ),
+        )
 
     suspend fun lock(device: Device) = unit(device, "/system/lock")
     suspend fun sleep(device: Device) = unit(device, "/system/sleep")

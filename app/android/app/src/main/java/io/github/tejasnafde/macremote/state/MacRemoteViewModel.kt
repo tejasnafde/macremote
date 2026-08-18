@@ -8,6 +8,10 @@ import io.github.tejasnafde.macremote.data.ApiException
 import io.github.tejasnafde.macremote.data.AppEntry
 import io.github.tejasnafde.macremote.data.AudioApp
 import io.github.tejasnafde.macremote.data.BrowserTab
+import io.github.tejasnafde.macremote.data.BrightnessRecovery
+import io.github.tejasnafde.macremote.data.BrightnessResult
+import io.github.tejasnafde.macremote.data.BrightnessTargetResolver
+import io.github.tejasnafde.macremote.data.DisplayRefresh
 import io.github.tejasnafde.macremote.data.Device
 import io.github.tejasnafde.macremote.data.DisplayInfo
 import io.github.tejasnafde.macremote.data.DisplayWindows
@@ -46,6 +50,7 @@ data class MacRemoteUiState(
     val mediaNotificationEnabled: Boolean = false,
     val readingMode: String = "arrows",
     val latestRelease: LatestRelease? = null,
+    val checkingForUpdate: Boolean = false,
     val updateProgress: Int? = null,
     val message: String? = null,
 )
@@ -62,6 +67,8 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
     val state: StateFlow<MacRemoteUiState> = mutableState.asStateFlow()
     private val responseGate = ResponseGate()
     private var pollJob: Job? = null
+    private var displayRefreshJob: Job? = null
+    private var displaySyncJob: Job? = null
     private var volumeJob: Job? = null
     private var volumeQueue = FinalWinsQueue<Int>()
     private var volumeSignal = Channel<Unit>(Channel.CONFLATED)
@@ -222,12 +229,8 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
             )
         }
         startVolumeWriter(device)
+        scheduleDisplayRefresh(device)
         pollJob = viewModelScope.launch {
-            launch {
-                runCatching { graph.api.displays(device) }.onSuccess { displays ->
-                    if (state.value.activeDevice?.id == device.id) mutableState.update { it.copy(displays = displays) }
-                }
-            }
             while (isActive) {
                 refresh(device)
                 delay(POLL_MS)
@@ -262,6 +265,10 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
     private fun pausePolling() {
         pollJob?.cancel()
         pollJob = null
+        displayRefreshJob?.cancel()
+        displayRefreshJob = null
+        displaySyncJob?.cancel()
+        displaySyncJob = null
     }
 
     private fun startVolumeWriter(device: Device) {
@@ -309,7 +316,11 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
                 })
             }
         }
-        withDevice { graph.api.setBrightness(it, safe, target) }
+        withDevice { device ->
+            val result = graph.api.setBrightness(device, safe, target)
+            applyBrightnessFollowUp(device, BrightnessRecovery.after(result, target))
+            requireBrightnessSuccess(result)
+        }
     }
 
     fun command(action: RemoteAction) = withDevice { device ->
@@ -334,8 +345,8 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
             RemoteAction.VolumeUp -> graph.api.volumeUp(device)
             RemoteAction.VolumeDown -> graph.api.volumeDown(device)
             RemoteAction.Mute -> graph.api.mute(device)
-            RemoteAction.BrightnessUp -> graph.api.brightnessStep(device, "up", state.value.brightnessTarget)
-            RemoteAction.BrightnessDown -> graph.api.brightnessStep(device, "down", state.value.brightnessTarget)
+            RemoteAction.BrightnessUp -> changeBrightness(device, "up")
+            RemoteAction.BrightnessDown -> changeBrightness(device, "down")
             RemoteAction.Lock -> graph.api.lock(device)
             RemoteAction.Sleep -> graph.api.sleep(device)
             RemoteAction.Blackout -> graph.api.blackout(device)
@@ -402,28 +413,39 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun checkForUpdate(manual: Boolean = true) {
+        if (manual && state.value.checkingForUpdate) return
+        if (manual) mutableState.update { it.copy(checkingForUpdate = true) }
         viewModelScope.launch {
-            runCatching { graph.updates.check() }
-                .onSuccess { release ->
-                    mutableState.update {
-                        it.copy(
-                            latestRelease = release,
-                            message = if (manual && release == null) "macremote is up to date" else it.message,
-                        )
+            try {
+                runCatching { graph.updates.check() }
+                    .onSuccess { release ->
+                        mutableState.update {
+                            it.copy(
+                                latestRelease = release,
+                                message = if (manual && release == null) "macremote is up to date" else it.message,
+                            )
+                        }
                     }
+                    .onFailure { if (manual) postError(it) }
+            } finally {
+                if (manual) {
+                    mutableState.update { current -> current.copy(checkingForUpdate = false) }
                 }
-                .onFailure { if (manual) postError(it) }
+            }
         }
     }
 
     fun installUpdate() {
         val release = state.value.latestRelease ?: return
+        if (state.value.updateProgress != null) return
+        mutableState.update { it.copy(updateProgress = 0) }
         viewModelScope.launch {
-            mutableState.update { it.copy(updateProgress = 0) }
             runCatching {
                 graph.updates.downloadAndInstall(release) { progress ->
                     mutableState.update { it.copy(updateProgress = progress) }
                 }
+            }.onSuccess {
+                mutableState.update { current -> current.copy(updateProgress = null) }
             }.onFailure {
                 mutableState.update { current -> current.copy(updateProgress = null) }
                 postError(it)
@@ -445,6 +467,59 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
     private fun postError(error: Throwable) {
         if (error is CancellationException) return
         mutableState.update { it.copy(message = error.message ?: "Something went wrong") }
+    }
+
+    private suspend fun changeBrightness(device: Device, direction: String) {
+        val target = state.value.brightnessTarget
+        val result = graph.api.brightnessStep(device, direction, target)
+        applyBrightnessFollowUp(device, BrightnessRecovery.after(result, target))
+        requireBrightnessSuccess(result)
+    }
+
+    private suspend fun applyBrightnessFollowUp(device: Device, refresh: DisplayRefresh) {
+        when (refresh) {
+            DisplayRefresh.None -> Unit
+            DisplayRefresh.Immediate -> {
+                displaySyncJob?.cancel()
+                displaySyncJob = null
+                refreshDisplaysBestEffort(device)
+            }
+            DisplayRefresh.Debounced -> scheduleDisplaySync(device)
+        }
+    }
+
+    private suspend fun refreshDisplays(device: Device) {
+        val displays = graph.api.displays(device)
+        if (state.value.activeDevice?.id != device.id) return
+        val savedTarget = graph.devices.brightnessTarget(device.id)
+        val resolvedTarget = BrightnessTargetResolver.resolve(savedTarget, displays)
+        mutableState.update { it.copy(displays = displays, brightnessTarget = resolvedTarget) }
+    }
+
+    private suspend fun refreshDisplaysBestEffort(device: Device) {
+        runCatching { refreshDisplays(device) }
+    }
+
+    private fun scheduleDisplayRefresh(device: Device) {
+        displayRefreshJob?.cancel()
+        displayRefreshJob = viewModelScope.launch {
+            while (isActive && state.value.activeDevice?.id == device.id) {
+                refreshDisplaysBestEffort(device)
+                delay(DISPLAY_REFRESH_MS)
+            }
+        }
+    }
+
+    private fun scheduleDisplaySync(device: Device) {
+        displaySyncJob?.cancel()
+        displaySyncJob = viewModelScope.launch {
+            delay(DISPLAY_SYNC_DELAY_MS)
+            refreshDisplaysBestEffort(device)
+        }
+    }
+
+    private fun requireBrightnessSuccess(result: BrightnessResult) {
+        result.failureMessage()?.let { throw ApiException(it) }
     }
 
     private fun rememberTab(tab: BrowserTab) {
@@ -471,7 +546,11 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
         super.onCleared()
     }
 
-    private companion object { const val POLL_MS = 3_000L }
+    private companion object {
+        const val POLL_MS = 3_000L
+        const val DISPLAY_REFRESH_MS = 30_000L
+        const val DISPLAY_SYNC_DELAY_MS = 800L
+    }
 }
 
 enum class RemoteAction {
