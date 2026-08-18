@@ -23,6 +23,8 @@ def test_updater_checks_out_selected_tag_and_verifies_exact_version():
     assert 'git checkout --detach --quiet "$LATEST_TAG"' in script
     assert '"$GOT" = "$EXPECTED"' in script
     assert 'restart_and_check "$LATEST"' in script
+    assert "json.load(sys.stdin).get('version', '')" in script
+    assert "tr -d" not in script
 
 
 def test_updater_recovers_a_dead_process_lock():

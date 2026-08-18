@@ -59,7 +59,12 @@ restart_and_check() {
   launchctl kickstart -k "gui/$UID_NUM/io.macremote.server"
   for i in $(seq 1 10); do
     sleep 1
-    GOT="$(curl -sf -m 2 http://127.0.0.1:8484/version 2>/dev/null | tr -d '"' || true)"
+    GOT="$(
+      curl -sf -m 2 http://127.0.0.1:8484/version 2>/dev/null \
+        | "$REPO/server/.venv/bin/python" -c \
+          "import json, sys; print(json.load(sys.stdin).get('version', ''))" \
+          2>/dev/null || true
+    )"
     [ "$GOT" = "$EXPECTED" ] && return 0
   done
   return 1
