@@ -40,6 +40,7 @@ class AbsolutePlaybackGate {
         if (transition.order > lastSucceededOrder) {
             confirmed = transition.to
             lastSucceededOrder = transition.order
+            if (pending == null) current = transition.to
         }
     }
 
