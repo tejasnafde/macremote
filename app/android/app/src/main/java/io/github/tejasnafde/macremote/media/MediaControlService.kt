@@ -95,6 +95,7 @@ class MediaControlService : Service() {
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
         scope.launch {
             runCatching { graph().api.playPause(target) }
+                .onSuccess { playbackGate.succeeded(transition) }
                 .onFailure {
                     playbackGate.failed(transition)
                     getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())

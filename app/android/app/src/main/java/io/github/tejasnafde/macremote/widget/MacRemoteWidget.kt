@@ -3,8 +3,10 @@ package io.github.tejasnafde.macremote.widget
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.widget.RemoteViews
 import io.github.tejasnafde.macremote.MacRemoteApplication
 import io.github.tejasnafde.macremote.MainActivity
@@ -14,6 +16,25 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+
+internal fun shouldKeepLegacyWidgetProvider(widgetIds: IntArray): Boolean = widgetIds.isNotEmpty()
+
+fun reconcileLegacyWidgetProvider(context: Context) {
+    runCatching {
+        val component = ComponentName(context, MacRemoteWidget::class.java)
+        val widgetIds = AppWidgetManager.getInstance(context).getAppWidgetIds(component)
+        val state = if (shouldKeepLegacyWidgetProvider(widgetIds)) {
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        } else {
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        }
+        context.packageManager.setComponentEnabledSetting(
+            component,
+            state,
+            PackageManager.DONT_KILL_APP,
+        )
+    }
+}
 
 open class RemoteWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {

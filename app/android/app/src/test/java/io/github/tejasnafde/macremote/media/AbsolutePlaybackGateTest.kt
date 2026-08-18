@@ -28,6 +28,18 @@ class AbsolutePlaybackGateTest {
         assertEquals(true, gate.current)
     }
 
+    @Test fun `newer failure restores an older successfully applied transition`() {
+        val gate = AbsolutePlaybackGate()
+        gate.observe(true, nowMs = 1_000)
+        val pause = gate.begin(false, nowMs = 1_100)!!
+        val play = gate.begin(true, nowMs = 1_200)!!
+
+        gate.succeeded(pause)
+        gate.failed(play)
+
+        assertEquals(false, gate.current)
+    }
+
     @Test fun `stale poll cannot replace a newer local playback intent`() {
         val gate = AbsolutePlaybackGate()
         gate.observe(true, nowMs = 1_000)

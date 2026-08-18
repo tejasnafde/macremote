@@ -4,6 +4,7 @@ class PlaybackTransition internal constructor(
     val from: Boolean,
     val to: Boolean,
     internal val startedAtMs: Long,
+    internal val order: Long,
 )
 
 class AbsolutePlaybackGate {
@@ -12,6 +13,8 @@ class AbsolutePlaybackGate {
 
     private var pending: PlaybackTransition? = null
     private var confirmed: Boolean? = null
+    private var nextOrder = 0L
+    private var lastSucceededOrder = -1L
 
     @Synchronized
     fun observe(playing: Boolean, nowMs: Long = System.currentTimeMillis()) {
@@ -29,7 +32,15 @@ class AbsolutePlaybackGate {
         val previous = current ?: return null
         if (previous == desired) return null
         current = desired
-        return PlaybackTransition(previous, desired, nowMs).also { pending = it }
+        return PlaybackTransition(previous, desired, nowMs, nextOrder++).also { pending = it }
+    }
+
+    @Synchronized
+    fun succeeded(transition: PlaybackTransition) {
+        if (transition.order > lastSucceededOrder) {
+            confirmed = transition.to
+            lastSucceededOrder = transition.order
+        }
     }
 
     @Synchronized

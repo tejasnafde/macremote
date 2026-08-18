@@ -65,7 +65,18 @@ def test_native_widget_keeps_the_v044_and_v050_component_names():
     assert 'android:name=".widget.MacRemoteWidget"' in manifest
     assert "class RemoteWidget" in widget
     assert "class MacRemoteWidget" in widget
+    assert "reconcileLegacyWidgetProvider(this)" in (
+        ROOT / "app/android/app/src/main/java/io/github/tejasnafde/macremote/MacRemoteApplication.kt"
+    ).read_text()
     assert "catch (_: Exception)" in widget
+
+
+def test_media_service_records_success_before_a_later_transition_can_rollback():
+    service = (
+        ROOT
+        / "app/android/app/src/main/java/io/github/tejasnafde/macremote/media/MediaControlService.kt"
+    ).read_text()
+    assert ".onSuccess { playbackGate.succeeded(transition) }" in service
 
 
 def test_native_timer_editor_visually_marks_the_current_mode():
