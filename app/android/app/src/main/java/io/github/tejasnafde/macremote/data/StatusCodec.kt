@@ -22,9 +22,13 @@ object StatusCodec {
                 audible = item.optBoolean("audible"),
                 muted = item.optBoolean("muted"),
                 volume = item.nullableInt("volume"),
+                playbackRate = item.nullableFloat("playback_rate"),
                 fullscreen = item.optBoolean("fullscreen"),
                 controllable = if (item.has("controllable") && !item.isNull("controllable")) item.optBoolean("controllable") else null,
             )
+        }
+        val bridges = root.optJSONArray("browser_bridges").mapObjects { item ->
+            BrowserBridge(item.optString("browser"), item.nullableString("version"))
         }
         return MacStatus(
             nowPlaying = now,
@@ -34,6 +38,7 @@ object StatusCodec {
             battery = root.nullableInt("battery"),
             sleepTimer = timer,
             browserTabs = tabs,
+            browserBridges = bridges,
         )
     }
 }
@@ -43,6 +48,9 @@ internal fun JSONObject.nullableString(key: String): String? =
 
 internal fun JSONObject.nullableInt(key: String): Int? =
     takeIf { has(key) && !isNull(key) }?.optInt(key)
+
+internal fun JSONObject.nullableFloat(key: String): Float? =
+    takeIf { has(key) && !isNull(key) }?.optDouble(key)?.toFloat()
 
 internal inline fun <T> JSONArray?.mapObjects(block: (JSONObject) -> T): List<T> {
     if (this == null) return emptyList()

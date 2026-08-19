@@ -13,7 +13,7 @@ assert.ok(start > 0, "mediaOp not found in background.js");
 const body = src.slice(start, end);
 // The slice ends at the first column-0 "}", so a stray unindented brace inside
 // mediaOp would silently truncate what gets tested. Check every op is present.
-for (const op of ["probe", "seek", "setvolume", "toggle"]) {
+for (const op of ["probe", "seek", "setvolume", "setrate", "toggle"]) {
   assert.ok(body.includes(`"${op}"`), `extracted mediaOp is missing ${op}`);
 }
 const mediaOp = new Function(`${body}; return mediaOp;`)();
@@ -23,6 +23,7 @@ function el(props) {
     duration: 300,
     currentTime: 0,
     volume: 1,
+    playbackRate: 1,
     paused: true,
     played: false,
     pause() {
@@ -91,6 +92,14 @@ assert.equal(v.volume, 0.4);
 mediaOp("setvolume", 0);
 assert.equal(v.volume, 0);
 assert.equal(v.muted, undefined, "setvolume must not touch muted");
+
+// Playback rate is reported as a multiplier and set from an integer percent
+// on the wire, avoiding floating-point ambiguity in the command queue.
+const rate = el({ playbackRate: 1.25, paused: false });
+withDom([rate]);
+assert.equal(mediaOp("probe").playbackRate, 1.25);
+mediaOp("setrate", 170);
+assert.equal(rate.playbackRate, 1.7);
 
 // Live streams report duration Infinity. Filtering on Number.isFinite locked
 // every livestream out of play, pause, seek and volume at once.

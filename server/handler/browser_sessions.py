@@ -17,6 +17,9 @@ import time
 
 class BrowserSessionRegistry:
     SESSION_TTL_SECONDS = 15
+    # Connection diagnostics should tolerate missed reports and Chrome's packed
+    # extension alarm clamp without keeping stale tab controls visible.
+    BRIDGE_TTL_SECONDS = 90
     # Must stay comfortably ABOVE the extension's slowest poll interval (15s
     # idle, and Chrome can clamp alarms to 60s for a packed build): a TTL under
     # that silently ate every tap, since each command expired before the
@@ -30,6 +33,7 @@ class BrowserSessionRegistry:
     def __init__(self, clock=time.monotonic):
         self._clock = clock
         self._sessions: dict[str, dict] = {}  # key: "{browser}:{tab_id}"
+        self._bridges: dict[str, dict] = {}  # browser -> version + heartbeat
         self._commands: dict[str, list[dict]] = {}  # browser -> queued commands
         self._next_command_id = 1
 
@@ -37,9 +41,14 @@ class BrowserSessionRegistry:
         """The registry's clock, so callers can compare against `updated_at`."""
         return self._clock()
 
-    def report(self, browser: str, tabs: list[dict]) -> None:
+    def report(self, browser: str, tabs: list[dict], version: str | None = None) -> None:
         """Replace `browser`'s sessions wholesale (idempotent, no diffing)."""
         now = self._clock()
+        self._bridges[browser] = {
+            "browser": browser,
+            "version": version,
+            "updated_at": now,
+        }
         for key in [k for k, v in self._sessions.items() if v["browser"] == browser]:
             del self._sessions[key]
         for tab in tabs:
@@ -53,6 +62,7 @@ class BrowserSessionRegistry:
                 "muted": bool(tab.get("muted", False)),
                 "playing": bool(tab.get("playing", False)),
                 "volume": tab.get("volume"),  # 0-100 or None when unreadable
+                "playback_rate": tab.get("playback_rate"),
                 # Kept nullable on purpose: None marks a pre-fullscreen-ack
                 # extension build, which is not the same as False.
                 "active": tab.get("active"),
@@ -70,6 +80,12 @@ class BrowserSessionRegistry:
         ]
         for key in expired:
             del self._sessions[key]
+        for browser in [
+            key
+            for key, bridge in self._bridges.items()
+            if now - bridge["updated_at"] > self.BRIDGE_TTL_SECONDS
+        ]:
+            del self._bridges[browser]
 
     def list_tabs(self) -> list[dict]:
         """Lazy-purge expired sessions, then return the live ones (drops the
@@ -78,6 +94,13 @@ class BrowserSessionRegistry:
         return [
             {k: v for k, v in session.items() if k != "updated_at"}
             for session in self._sessions.values()
+        ]
+
+    def list_bridges(self) -> list[dict]:
+        self._purge_expired()
+        return [
+            {"browser": bridge["browser"], "version": bridge["version"]}
+            for bridge in self._bridges.values()
         ]
 
     def get_tab(self, browser: str, tab_id: int) -> dict | None:

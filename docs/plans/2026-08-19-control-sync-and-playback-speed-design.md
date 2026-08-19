@@ -69,6 +69,18 @@ present. Browser tab cards and the transport controls move up when there is no
 native metadata. Browser bridge state will use a compact explanatory row rather
 than another large empty card.
 
+### Running apps and refresh stability
+
+Hammerspoon's window list can omit an application's windows when they are on a
+different macOS Space even though the running-app list still contains the app.
+Android will merge running apps whose bundle IDs are absent from the window
+groups, so Firefox remains focusable without duplicating Finder or other apps
+that already have visible window rows.
+
+Refresh progress will replace the header's refresh icon inside the same 48 dp
+touch target. Existing rows stay in place while data reloads; no temporary list
+item will push the whole screen down and pull it back up.
+
 ## Error handling and compatibility
 
 All new report fields are optional on the server so v0.4.4 reports continue to

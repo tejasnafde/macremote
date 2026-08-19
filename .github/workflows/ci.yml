@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: 20
       - name: Browser extension regression tests
-        run: node --test extension/mediaOp.test.mjs
+        run: node --test extension/*.test.mjs
 
   notify-failure:
     if: failure()

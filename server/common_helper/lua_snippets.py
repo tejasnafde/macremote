@@ -242,6 +242,20 @@ def gamma_set(screen_name: str, level: int) -> str:
     )
 
 
+def gamma_get(screen_name: str) -> str:
+    """Read the effective white point applied to one screen as 0-100."""
+    safe = screen_name.replace("\\", "").replace('"', "")
+    return (
+        f'local s = hs.screen.find("{safe}"); '
+        "if not s then return 'null' end; "
+        "local g = s:getGamma(); "
+        "local w = g and g.whitepoint; "
+        "if not w then return 'null' end; "
+        "return tostring(math.floor((((w.red or 0) + (w.green or 0) + "
+        "(w.blue or 0)) / 3) * 100 + 0.5))"
+    )
+
+
 # List running, visible (dock-worthy) apps as JSON [{name, bundle_id, active}].
 # Filters to regular apps with a bundle id, so background daemons and agents
 # (including macremote/Hammerspoon itself) do not clutter the switcher.

@@ -12,7 +12,8 @@ class StatusCodecTest {
           "now_playing":{"title":"Low","artist":"Chet Faker","app":"Spotify","state":"kPlaybackStatePlaying"},
           "volume":42,"muted":false,"brightness":null,"battery":87,
           "sleep_timer":{"remaining_seconds":125,"mode":"blackout"},
-          "browser_tabs":[{"tab_id":7,"browser":"firefox","title":"Video","playing":true,"audible":true,"muted":false,"volume":65,"fullscreen":false,"controllable":true}]
+          "browser_tabs":[{"tab_id":7,"browser":"firefox","title":"Video","playing":true,"audible":true,"muted":false,"volume":65,"playback_rate":1.3,"fullscreen":false,"controllable":true}],
+          "browser_bridges":[{"browser":"firefox","version":"0.5.4"}]
         }"""
 
         val status = StatusCodec.decode(json)
@@ -25,6 +26,8 @@ class StatusCodecTest {
         assertEquals(SleepMode.Blackout, status.sleepTimer?.mode)
         assertEquals("firefox:7", status.browserTabs.single().key)
         assertFalse(status.browserTabs.single().muted)
+        assertEquals(1.3f, status.browserTabs.single().playbackRate)
+        assertEquals("0.5.4", status.browserBridges.single().version)
     }
 
     @Test fun `older server response degrades missing optional fields safely`() {
@@ -35,6 +38,8 @@ class StatusCodecTest {
 
         assertNull(status.nowPlaying)
         assertNull(status.browserTabs.single().controllable)
+        assertNull(status.browserTabs.single().playbackRate)
+        assertEquals(emptyList<BrowserBridge>(), status.browserBridges)
         assertEquals(50, status.brightness)
     }
 }

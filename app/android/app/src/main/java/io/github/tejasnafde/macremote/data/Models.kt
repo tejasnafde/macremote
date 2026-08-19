@@ -30,6 +30,7 @@ data class BrowserTab(
     val audible: Boolean,
     val muted: Boolean,
     val volume: Int?,
+    val playbackRate: Float?,
     val fullscreen: Boolean,
     val controllable: Boolean?,
 ) {
@@ -39,6 +40,8 @@ data class BrowserTab(
 
 data class FullscreenResult(val ok: Boolean, val note: String?)
 
+data class BrowserBridge(val browser: String, val version: String?)
+
 data class MacStatus(
     val nowPlaying: NowPlaying?,
     val volume: Int?,
@@ -47,6 +50,7 @@ data class MacStatus(
     val battery: Int?,
     val sleepTimer: SleepTimerStatus?,
     val browserTabs: List<BrowserTab>,
+    val browserBridges: List<BrowserBridge>,
 )
 
 data class DisplayInfo(
@@ -62,3 +66,10 @@ data class AppEntry(val name: String, val bundleId: String, val active: Boolean)
 data class WindowEntry(val id: Int, val app: String, val bundleId: String, val title: String, val active: Boolean)
 data class DisplayWindows(val name: String, val id: Int, val windows: List<WindowEntry>)
 data class AudioApp(val name: String, val volume: Int)
+
+object AppListMerger {
+    fun withoutListedWindows(windows: List<DisplayWindows>, apps: List<AppEntry>): List<AppEntry> {
+        val listedBundleIds = windows.flatMap { it.windows }.mapTo(mutableSetOf()) { it.bundleId }
+        return apps.filterNot { it.bundleId in listedBundleIds }
+    }
+}

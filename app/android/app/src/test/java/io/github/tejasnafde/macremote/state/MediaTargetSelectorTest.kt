@@ -17,6 +17,7 @@ class MediaTargetSelectorTest {
         audible = true,
         muted = false,
         volume = 80,
+        playbackRate = 1f,
         fullscreen = false,
         controllable = true,
     )
@@ -26,6 +27,15 @@ class MediaTargetSelectorTest {
         val status = status(tabs = listOf(tab))
 
         assertEquals(tab, MediaTargetSelector.select(status, null, 0, nowMs = 1_000))
+    }
+
+    @Test
+    fun `audible player wins over an earlier muted autoplay tab`() {
+        val decoration = tab.copy(tabId = 1, title = "Hero video", audible = false, muted = true)
+        val music = tab.copy(tabId = 42, title = "Music")
+        val status = status(tabs = listOf(decoration, music))
+
+        assertEquals(music, MediaTargetSelector.select(status, null, 0, nowMs = 1_000))
     }
 
     @Test
@@ -72,5 +82,6 @@ class MediaTargetSelectorTest {
         battery = 80,
         sleepTimer = null,
         browserTabs = tabs,
+        browserBridges = emptyList(),
     )
 }

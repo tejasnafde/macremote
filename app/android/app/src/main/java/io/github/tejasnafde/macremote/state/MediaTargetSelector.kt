@@ -15,7 +15,10 @@ object MediaTargetSelector {
         status ?: return null
         val nativeNowPlaying = status.nowPlaying?.let { it.title != null || it.state != null } == true
         if (nativeNowPlaying) return null
-        return status.browserTabs.firstOrNull { it.playing && it.isDrivable }
+        return status.browserTabs.firstOrNull {
+            it.playing && it.isDrivable && it.audible && !it.muted
+        }
+            ?: status.browserTabs.firstOrNull { it.playing && it.isDrivable }
             ?: status.browserTabs.firstOrNull {
                 nowMs - rememberedAtMs <= MEMORY_MS &&
                     nowMs >= rememberedAtMs &&

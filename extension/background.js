@@ -8,9 +8,8 @@
  *
  * Loop, driven by chrome.alarms (survives service worker eviction - each
  * alarm fire wakes this script back up):
- *   - every 5s: collect audible tabs + any tab we have seen play that is still
- *     open (so a paused tab stays controllable until its tab is closed),
- *     report the full list to the server.
+ *   - every 5s: probe audible tabs, each window's active tab, and known media
+ *     tabs that are still open, then report the controllable set to the server.
  *   - poll /browser/commands every 2s while we know about at least one
  *     media tab, otherwise every 15s (idle, nothing to control).
  *   - after executing any command, report again immediately so the phone gets
@@ -77,6 +76,57 @@ function tabEntry(tab) {
   };
 }
 
+function mergeCandidateTabs(audibleTabs, activeTabs, known) {
+  const candidates = {};
+  for (const tab of [...audibleTabs, ...activeTabs]) {
+    const previous = known[tab.id];
+    candidates[tab.id] = {
+      ...tabEntry(tab),
+      frameId: previous ? previous.frameId ?? null : null,
+      wasKnown: Boolean(previous),
+      // Builds before this field existed only persisted audible tabs, so a
+      // legacy entry is safe to retain for MediaSession fallback.
+      keepWithoutProbe: previous ? previous.keepWithoutProbe ?? true : false,
+    };
+  }
+  for (const [tabId, previous] of Object.entries(known)) {
+    if (!candidates[tabId]) {
+      candidates[tabId] = {
+        ...previous,
+        wasKnown: true,
+        keepWithoutProbe: previous.keepWithoutProbe ?? true,
+      };
+    }
+  }
+  return candidates;
+}
+
+function shouldReportCandidate(candidate, probe) {
+  return candidate.audible || probe != null ||
+    (candidate.wasKnown && candidate.keepWithoutProbe);
+}
+
+function nextFrameId(previousFrameId, probe) {
+  return probe.result != null ? probe.frameId : previousFrameId;
+}
+
+async function queryCandidateTabs(tabsApi = api.tabs) {
+  const [audibleResult, activeResult] = await Promise.allSettled([
+    tabsApi.query({ audible: true }),
+    tabsApi.query({ active: true }),
+  ]);
+  if (audibleResult.status === "rejected") {
+    console.error("macremote: audible tab discovery failed", audibleResult.reason);
+  }
+  if (activeResult.status === "rejected") {
+    console.error("macremote: active tab discovery failed", activeResult.reason);
+  }
+  return [
+    audibleResult.status === "fulfilled" ? audibleResult.value : [],
+    activeResult.status === "fulfilled" ? activeResult.value : [],
+  ];
+}
+
 // Reports must not overlap. /browser/report replaces a browser's whole tab list,
 // and probing is slow (one injection per tab), so a report that started before a
 // command could land after the one that started after it and put the pre-command
@@ -89,9 +139,9 @@ function queueReport() {
 }
 
 /**
- * Collects audible tabs plus recently-known media tabs, persists the merged
- * set, and reports it to the server. Returns the number of tabs reported so
- * the caller can decide the next poll cadence.
+ * Probes audible tabs, each window's active tab, and known media tabs; persists
+ * the media-bearing set and reports it to the server. Returns the number of
+ * tabs reported so the caller can decide the next poll cadence.
  */
 async function collectAndReport() {
   const config = await getConfig();
@@ -99,18 +149,9 @@ async function collectAndReport() {
 
   const known = await getKnownTabs();
 
-  let audibleTabs = [];
-  try {
-    audibleTabs = await api.tabs.query({ audible: true });
-  } catch (err) {
-    console.error("macremote: tabs.query({audible:true}) failed", err);
-  }
+  const [audibleTabs, activeTabs] = await queryCandidateTabs();
 
-  const nextKnown = {};
-
-  for (const tab of audibleTabs) {
-    nextKnown[tab.id] = tabEntry(tab);
-  }
+  const nextKnown = mergeCandidateTabs(audibleTabs, activeTabs, known);
 
   // Carry over any tab we have seen play, for as long as it stays OPEN (not on
   // a timer): a video you paused to listen to music might sit paused for an
@@ -118,12 +159,16 @@ async function collectAndReport() {
   // when the tab is actually closed (tabs.get throws). Re-read from the live
   // tab every time so title/muted/active never go stale.
   for (const tabIdKey of Object.keys(known)) {
-    if (nextKnown[tabIdKey]) continue;
     try {
       const tab = await api.tabs.get(Number(tabIdKey));
-      nextKnown[tabIdKey] = tabEntry(tab);
+      nextKnown[tabIdKey] = {
+        ...tabEntry(tab),
+        frameId: known[tabIdKey].frameId ?? null,
+        wasKnown: true,
+        keepWithoutProbe: known[tabIdKey].keepWithoutProbe ?? true,
+      };
     } catch (err) {
-      // Tab was closed - let it drop out of the known set.
+      delete nextKnown[tabIdKey];
     }
   }
 
@@ -144,7 +189,8 @@ async function collectAndReport() {
     const t = nextKnown[id];
     const p = probes[i].result;
     // Remember which frame owns the player so commands hit exactly that one.
-    nextKnown[id].frameId = probes[i].frameId;
+    nextKnown[id].frameId = nextFrameId(t.frameId, probes[i]);
+    nextKnown[id].keepWithoutProbe = Boolean(t.keepWithoutProbe || t.audible);
     return {
       tab_id: t.tabId,
       title: t.title,
@@ -153,6 +199,7 @@ async function collectAndReport() {
       muted: t.muted,
       playing: p ? !p.paused : t.audible,
       volume: p ? p.volume : null,
+      playback_rate: p ? p.playbackRate : null,
       active: t.active,
       fullscreen: p ? p.fullscreen : false,
       // Did we actually find a media element we can drive? When false the phone
@@ -161,14 +208,28 @@ async function collectAndReport() {
       // (closed shadow DOM, DRM, a frame we are not allowed to inject).
       controllable: Boolean(p),
     };
+  }).filter((tab, i) => {
+    const candidate = nextKnown[ids[i]];
+    return shouldReportCandidate(candidate, probes[i].result);
   });
-  await setKnownTabs(nextKnown);
+
+  const persisted = {};
+  for (const tab of tabs) {
+    const candidate = nextKnown[tab.tab_id];
+    const { wasKnown, ...entry } = candidate;
+    persisted[tab.tab_id] = entry;
+  }
+  await setKnownTabs(persisted);
 
   try {
     await serverFetch(config, "/browser/report", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ browser: BROWSER_NAME, tabs }),
+      body: JSON.stringify({
+        browser: BROWSER_NAME,
+        extension_version: api.runtime.getManifest().version,
+        tabs,
+      }),
     });
   } catch (err) {
     console.error("macremote: /browser/report failed", err);
@@ -208,6 +269,7 @@ function mediaOp(op, arg) {
     return {
       paused: el.paused,
       volume: Math.round((el.volume || 0) * 100),
+      playbackRate: el.playbackRate,
       fullscreen: document.fullscreenElement != null,
     };
   }
@@ -225,6 +287,10 @@ function mediaOp(op, arg) {
   // so volume 0 and mute remain independently reversible from the phone.
   if (op === "setvolume") {
     el.volume = arg / 100;
+    return true;
+  }
+  if (op === "setrate") {
+    el.playbackRate = arg / 100;
     return true;
   }
   // "play" | "pause" | "toggle"
@@ -322,6 +388,8 @@ async function executeCommand(command) {
     if (delta) await runMediaOp(tabId, "seek", delta, frameId);
   } else if (action === "setvolume") {
     await runMediaOp(tabId, "setvolume", Math.max(0, Math.min(100, Number(command.value) || 0)), frameId);
+  } else if (action === "setrate") {
+    await runMediaOp(tabId, "setrate", Math.max(100, Math.min(200, Number(command.value) || 100)), frameId);
   } else {
     console.warn("macremote: unknown command action", action);
   }

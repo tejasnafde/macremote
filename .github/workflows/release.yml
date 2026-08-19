@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: 20
       - name: Browser extension tests (release gate)
-        run: node --test extension/mediaOp.test.mjs
+        run: node --test extension/*.test.mjs
 
   build-apk:
     needs: test

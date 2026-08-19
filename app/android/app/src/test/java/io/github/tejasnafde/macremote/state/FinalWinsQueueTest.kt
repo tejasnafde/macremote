@@ -19,7 +19,7 @@ class FinalWinsQueueTest {
         assertNull(queue.takeNext())
     }
 
-    @Test fun `a preview arriving after commit cannot replace it`() {
+    @Test fun `a preview arriving after commit waits behind it instead of being dropped`() {
         val queue = FinalWinsQueue<Int>()
         queue.offerPreview(10)
         assertEquals(10, queue.takeNext())
@@ -27,6 +27,8 @@ class FinalWinsQueueTest {
         queue.offerPreview(20)
         queue.completeInFlight()
         assertEquals(50, queue.takeNext())
+        queue.completeInFlight()
+        assertEquals(20, queue.takeNext())
     }
 
     @Test fun `a newer commit arriving while a commit is in flight is not discarded`() {

@@ -35,6 +35,7 @@ def test_report_requires_auth(client):
 def test_report_and_status_shape(client, fake_hs, browser_registry):
     body = {
         "browser": "chrome",
+        "extension_version": "0.5.4",
         "tabs": [
             {
                 "tab_id": 1,
@@ -43,6 +44,7 @@ def test_report_and_status_shape(client, fake_hs, browser_registry):
                 "audible": True,
                 "muted": False,
                 "playing": True,
+                "playback_rate": 1.3,
             },
             {
                 "tab_id": 2,
@@ -65,14 +67,81 @@ def test_report_and_status_shape(client, fake_hs, browser_registry):
         {
             "tab_id": 1, "browser": "chrome", "title": "Song A", "url_host": "youtube.com",
             "playing": True, "audible": True, "muted": False, "volume": None,
-            "fullscreen": False, "controllable": None,
+            "playback_rate": 1.3, "fullscreen": False, "controllable": None,
         },
         {
             "tab_id": 2, "browser": "chrome", "title": "Song B", "url_host": "spotify.com",
             "playing": False, "audible": False, "muted": True, "volume": None,
-            "fullscreen": False, "controllable": None,
+            "playback_rate": None, "fullscreen": False, "controllable": None,
         },
     ]
+    assert status_resp.json()["browser_bridges"] == [
+        {"browser": "chrome", "version": "0.5.4"}
+    ]
+
+
+def test_empty_report_keeps_connected_bridge_visible(client, fake_hs, browser_registry):
+    response = client.post(
+        "/browser/report",
+        headers=AUTH_HEADERS,
+        json={"browser": "firefox", "extension_version": "0.5.4", "tabs": []},
+    )
+
+    assert response.status_code == 200
+    status = client.get("/status", headers=AUTH_HEADERS).json()
+    assert status["browser_tabs"] == []
+    assert status["browser_bridges"] == [
+        {"browser": "firefox", "version": "0.5.4"}
+    ]
+
+
+def test_bridge_heartbeat_survives_a_transient_gap_after_tabs_expire(
+    client, fake_hs, browser_registry
+):
+    client.post(
+        "/browser/report",
+        headers=AUTH_HEADERS,
+        json={
+            "browser": "firefox",
+            "extension_version": "0.5.4",
+            "tabs": [{"tab_id": 1, "title": "Video"}],
+        },
+    )
+
+    browser_registry.clock.tick(browser_registry.SESSION_TTL_SECONDS + 1)
+
+    assert browser_registry.list_tabs() == []
+    assert browser_registry.list_bridges() == [
+        {"browser": "firefox", "version": "0.5.4"}
+    ]
+
+
+def test_setrate_command_accepts_tenths_from_one_to_two(client, fake_hs, browser_registry):
+    response = client.post(
+        "/browser/tabs/42/command",
+        headers=AUTH_HEADERS,
+        json={"action": "setrate", "browser": "firefox", "value": 170},
+    )
+
+    assert response.status_code == 200
+    command = client.get(
+        "/browser/commands?browser=firefox", headers=AUTH_HEADERS
+    ).json()["commands"][0]
+    assert command == {"id": 1, "tab_id": 42, "action": "setrate", "value": 170}
+
+
+@pytest.mark.parametrize("value", [99, 201])
+def test_setrate_command_rejects_values_outside_ui_range(
+    client, fake_hs, browser_registry, value
+):
+    response = client.post(
+        "/browser/tabs/42/command",
+        headers=AUTH_HEADERS,
+        json={"action": "setrate", "browser": "firefox", "value": value},
+    )
+
+    assert response.status_code == 422
+    assert browser_registry.drain_commands("firefox") == []
 
 
 def test_playing_is_independent_of_audible(client, fake_hs, browser_registry):

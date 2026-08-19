@@ -20,7 +20,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
@@ -377,39 +379,44 @@ fun RemoteScreen(state: MacRemoteUiState, viewModel: MacRemoteViewModel, padding
                 UpdateAction(state, viewModel)
             }
         }
-        item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MacColors.Ink850,
-                shape = MaterialTheme.shapes.large,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            ) {
-                Column(Modifier.padding(22.dp)) {
-                    SectionLabel(status?.nowPlaying?.app ?: if (state.online) "Now playing" else "Last seen")
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        status?.nowPlaying?.title ?: "Ready when you are",
-                        style = MaterialTheme.typography.headlineMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(5.dp))
-                    Text(
-                        status?.nowPlaying?.artist ?: "Media keys work with any frontmost player.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MacColors.Off55,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+        nativeNowPlaying?.title?.let { title ->
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MacColors.Ink850,
+                    shape = MaterialTheme.shapes.large,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Column(Modifier.padding(22.dp)) {
+                        SectionLabel(nativeNowPlaying.app ?: "Now playing")
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.headlineMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        nativeNowPlaying.artist?.let { artist ->
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                artist,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MacColors.Off55,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
         }
-        if (!status?.browserTabs.isNullOrEmpty()) {
+        val browserTabs = status?.browserTabs.orEmpty()
+        if (browserTabs.isNotEmpty()) {
             item {
                 SectionLabel("Browser media")
                 Spacer(Modifier.height(8.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    items(status!!.browserTabs, key = { it.key }) { tab ->
+                    items(browserTabs, key = { it.key }) { tab ->
                         TactileSurface(
                             onClick = { selectedTabKey = tab.key },
                             modifier = Modifier.width(190.dp),
@@ -425,6 +432,14 @@ fun RemoteScreen(state: MacRemoteUiState, viewModel: MacRemoteViewModel, padding
                         }
                     }
                 }
+            }
+        } else if (state.online && status != null) {
+            item {
+                Text(
+                    browserBridgeMessage(status.browserBridges),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MacColors.Off55,
+                )
             }
         }
         item {
@@ -590,12 +605,13 @@ private fun BrightnessCard(
     onChooseDisplay: () -> Unit,
 ) {
     val selectedDisplay = state.displays.firstOrNull { it.id == state.brightnessTarget }
-    val serverBrightness = selectedDisplay?.let { it.brightness ?: it.gammaLevel } ?: state.status?.brightness
+    val serverBrightness = displayControlLevel(selectedDisplay, state.status?.brightness)
+    val controlLabel = if (selectedDisplay?.method == "gamma") "Screen dimming" else "Brightness"
     var localBrightness by remember(serverBrightness) { mutableFloatStateOf((serverBrightness ?: 50).toFloat()) }
     Surface(color = MacColors.Ink850, shape = MaterialTheme.shapes.medium, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SectionLabel("Brightness", Modifier.weight(1f))
+                SectionLabel(controlLabel, Modifier.weight(1f))
                 Text("${localBrightness.roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = MacColors.Off72)
                 if (state.displays.size > 1) {
                     Spacer(Modifier.width(8.dp))
@@ -751,6 +767,7 @@ private fun DisplaySheet(displays: List<DisplayInfo>, selected: String?, viewMod
             Text("Brightness display", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.height(14.dp))
             displays.forEach { display ->
+                val displayedLevel = if (display.method == "gamma") display.gammaLevel else display.brightness
                 TactileSurface(
                     onClick = { viewModel.selectBrightnessTarget(display.id); onDismiss() },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -759,7 +776,7 @@ private fun DisplaySheet(displays: List<DisplayInfo>, selected: String?, viewMod
                     Icon(Icons.Rounded.Computer, null, tint = if (display.id == selected) MacColors.Green else MacColors.Off55)
                     Spacer(Modifier.width(10.dp))
                     Text(display.name, Modifier.weight(1f))
-                    display.brightness?.let { Text("$it%", color = MacColors.Off55) }
+                    displayedLevel?.let { Text("$it%", color = MacColors.Off55) }
                 }
             }
         }
@@ -770,8 +787,16 @@ private fun DisplaySheet(displays: List<DisplayInfo>, selected: String?, viewMod
 @Composable
 private fun BrowserTabSheet(tab: BrowserTab, viewModel: MacRemoteViewModel, onDismiss: () -> Unit) {
     var volume by remember(tab.key, tab.volume) { mutableFloatStateOf((tab.volume ?: 100).toFloat()) }
+    var ratePercent by remember(tab.key, tab.playbackRate) {
+        mutableIntStateOf(((tab.playbackRate ?: 1f) * 100).roundToInt())
+    }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MacColors.Ink850) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+        ) {
             SectionLabel(tab.browser)
             Spacer(Modifier.height(8.dp))
             Text(tab.title, style = MaterialTheme.typography.headlineMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -794,6 +819,31 @@ private fun BrowserTabSheet(tab: BrowserTab, viewModel: MacRemoteViewModel, onDi
                 TactileSurface({ viewModel.tabCommand(tab, "seek", 10) }, Modifier.weight(1f), enabled = tab.isDrivable) { Icon(Icons.Rounded.Forward10, "Forward 10") }
                 TactileSurface({ viewModel.tabCommand(tab, "focus") }, Modifier.weight(1f)) { Icon(Icons.Rounded.OpenInNew, "Focus tab") }
                 TactileSurface({ viewModel.tabFullscreen(tab) }, Modifier.weight(1f), enabled = tab.isDrivable) { Icon(Icons.Rounded.Fullscreen, "Fullscreen") }
+            }
+            Spacer(Modifier.height(20.dp))
+            SectionLabel("Playback speed")
+            Spacer(Modifier.height(8.dp))
+            (100..200 step 10).toList().chunked(4).forEach { rowRates ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    rowRates.forEach { candidate ->
+                        FilledTonalButton(
+                            onClick = {
+                                ratePercent = candidate
+                                viewModel.tabCommand(tab, "setrate", candidate)
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            enabled = tab.isDrivable,
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = if (ratePercent == candidate) MacColors.Green.copy(alpha = .28f) else MacColors.Ink700,
+                            ),
+                        ) {
+                            Text(formatPlaybackRate(candidate))
+                        }
+                    }
+                    repeat(4 - rowRates.size) { Spacer(Modifier.weight(1f)) }
+                }
+                Spacer(Modifier.height(8.dp))
             }
             if (tab.volume != null) {
                 Spacer(Modifier.height(18.dp))
@@ -898,16 +948,24 @@ fun AppsScreen(state: MacRemoteUiState, viewModel: MacRemoteViewModel, padding: 
     ) {
         item {
             ScreenHeader("Apps", "Focus a window and balance app audio.", viewModel::back) {
-                IconButton(onClick = viewModel::loadApps) { Icon(Icons.Rounded.Refresh, "Refresh") }
+                IconButton(onClick = viewModel::loadApps, enabled = !state.loadingApps) {
+                    if (state.loadingApps) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MacColors.Off55)
+                    } else {
+                        Icon(Icons.Rounded.Refresh, "Refresh")
+                    }
+                }
             }
             Spacer(Modifier.height(12.dp))
         }
-        if (state.loadingApps) item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
         state.windows.forEach { display ->
             if (display.windows.isNotEmpty()) item { SectionLabel(display.name) }
             items(display.windows, key = { "window_${it.id}" }) { window ->
                 ListRow(window.app, window.title.ifBlank { "Untitled window" }, window.active) { viewModel.focusWindow(window.id) }
             }
+        }
+        if (state.fallbackApps.isNotEmpty()) {
+            item { SectionLabel("Other running apps") }
         }
         items(state.fallbackApps, key = { it.bundleId }) { app ->
             ListRow(app.name, if (app.active) "frontmost" else "tap to switch", app.active) { viewModel.focusApp(app.bundleId) }
@@ -961,4 +1019,43 @@ private fun ScreenHeader(title: String, detail: String, onBack: () -> Unit, trai
 private fun formatDuration(totalSeconds: Int): String {
     val safe = totalSeconds.coerceAtLeast(0)
     return "%d:%02d".format(safe / 60, safe % 60)
+}
+
+private fun formatPlaybackRate(percent: Int): String = when (percent) {
+    100 -> "1×"
+    200 -> "2×"
+    else -> "${percent / 100}.${(percent % 100) / 10}×"
+}
+
+internal fun browserBridgeMessage(bridges: List<io.github.tejasnafde.macremote.data.BrowserBridge>): String {
+    if (bridges.isEmpty()) return "Browser bridge not connected. Install or reload the extension."
+    val names = bridges.map { it.browser.replaceFirstChar(Char::uppercase) }
+    val subject = when (names.size) {
+        1 -> "${names.single()} bridge"
+        2 -> "${names.first()} and ${names.last()} bridges"
+        else -> "${names.dropLast(1).joinToString(", ")}, and ${names.last()} bridges"
+    }
+    val outdated = bridges.any { isBridgeVersionOutdated(it.version) }
+    val objectPronoun = if (bridges.size == 1) "it" else "them"
+    return if (outdated) "$subject connected. Update $objectPronoun for full controls."
+    else "$subject connected. No media detected."
+}
+
+private fun isBridgeVersionOutdated(version: String?): Boolean {
+    val parts = version?.split('.') ?: return true
+    if (parts.any { it.toIntOrNull() == null }) return true
+    val normalized = (parts.map(String::toInt) + listOf(0, 0, 0)).take(3)
+    return normalized.zip(listOf(0, 5, 4))
+        .firstOrNull { (actual, required) -> actual != required }
+        ?.let { (actual, required) -> actual < required }
+        ?: false
+}
+
+internal fun displayControlLevel(
+    selectedDisplay: DisplayInfo?,
+    builtinBrightness: Int?,
+): Int? = when {
+    selectedDisplay == null -> builtinBrightness
+    selectedDisplay.method == "gamma" -> selectedDisplay.gammaLevel
+    else -> selectedDisplay.brightness
 }

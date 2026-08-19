@@ -67,6 +67,7 @@ async def get_displays() -> dict:
     ]
 
     for disp in await _external_displays():
+        method = brightness_handler.get_method(disp["name"])
         displays.append(
             {
                 "id": str(disp["index"]),
@@ -75,10 +76,14 @@ async def get_displays() -> dict:
                 "brightness": await _external_brightness(disp["index"]),
                 # Gamma-dimming level (100 = undimmed) so the app can show the
                 # effective dim state.
-                "gamma_level": brightness_handler.get_gamma_level(disp["name"]),
+                "gamma_level": (
+                    await brightness_handler.get_effective_gamma_level(disp["name"])
+                    if method == "gamma"
+                    else None
+                ),
                 # "gamma" (default, works on any monitor) or "ddc" (opt-in for
                 # monitors that truly honor hardware brightness).
-                "method": brightness_handler.get_method(disp["name"]),
+                "method": method,
             }
         )
 

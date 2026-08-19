@@ -9,7 +9,7 @@ class FinalWinsQueue<T> {
 
     @Synchronized
     fun offerPreview(value: T) {
-        if (committed == null) preview = value
+        preview = value
     }
 
     @Synchronized

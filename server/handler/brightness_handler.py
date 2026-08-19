@@ -40,6 +40,17 @@ def get_gamma_level(display_name: str) -> int:
     return gamma_levels.get(display_name, 100)
 
 
+async def get_effective_gamma_level(display_name: str) -> int:
+    """Read macOS' live gamma white point, falling back to the last write."""
+    try:
+        raw = await asyncio.to_thread(run_hs, lua.gamma_get(display_name))
+        if raw != "null":
+            return _clamp(int(raw))
+    except (HSError, ValueError):
+        pass
+    return get_gamma_level(display_name)
+
+
 def get_method(display_name: str) -> str:
     return display_methods.get(display_name, DEFAULT_METHOD)
 
@@ -84,7 +95,8 @@ async def _gamma_fallback(display: str, *, delta: int = 0, absolute: int | None 
     Raises DDCError when this path fails too, so the router degrades to
     display_unsupported instead of a 502."""
     name = await _external_name(display)
-    level = _clamp_gamma(absolute if absolute is not None else get_gamma_level(name) + delta)
+    current = absolute if absolute is not None else await get_effective_gamma_level(name)
+    level = _clamp_gamma(current + (0 if absolute is not None else delta))
     try:
         await asyncio.to_thread(run_hs, lua.gamma_set(name, level))
     except HSError as exc:

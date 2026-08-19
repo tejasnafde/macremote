@@ -22,7 +22,9 @@ BrowserName = Literal["firefox", "chrome"]
 # play/pause are absolute; playpause is the legacy toggle, kept so an older app
 # build keeps working. Prefer the absolute pair: a toggle resolved seconds after
 # the tap cannot be reconciled with the icon the phone already drew.
-CommandAction = Literal["play", "pause", "playpause", "focus", "mute", "seek", "setvolume"]
+CommandAction = Literal[
+    "play", "pause", "playpause", "focus", "mute", "seek", "setvolume", "setrate"
+]
 
 
 class TabIn(BaseModel):
@@ -33,6 +35,7 @@ class TabIn(BaseModel):
     muted: bool = False
     playing: bool = False
     volume: int | None = None  # media element volume 0-100, when readable
+    playback_rate: float | None = None
     # None means the extension predates these fields. The extension is loaded
     # unpacked and reloaded by hand, while the server auto-updates, so "new
     # server, old extension" is a real state and must not fail silently.
@@ -45,6 +48,7 @@ class TabIn(BaseModel):
 
 class ReportBody(BaseModel):
     browser: BrowserName
+    extension_version: str | None = None
     tabs: list[TabIn]
 
 
@@ -60,17 +64,23 @@ class CommandBody(BaseModel):
 
     @model_validator(mode="after")
     def _validate_value(self) -> "CommandBody":
-        if self.action == "setvolume":
+        if self.action in {"setvolume", "setrate"}:
             if self.value is None:
-                raise ValueError("setvolume requires a value (0-100)")
-            if not 0 <= self.value <= 100:
-                raise ValueError("setvolume value must be 0-100")
+                raise ValueError(f"{self.action} requires a value")
+        if self.action == "setvolume" and not 0 <= self.value <= 100:
+            raise ValueError("setvolume value must be 0-100")
+        if self.action == "setrate" and not 100 <= self.value <= 200:
+            raise ValueError("setrate value must be 100-200")
         return self
 
 
 @router.post("/report")
 async def report(body: ReportBody) -> dict:
-    browser_sessions.registry.report(body.browser, [tab.model_dump() for tab in body.tabs])
+    browser_sessions.registry.report(
+        body.browser,
+        [tab.model_dump() for tab in body.tabs],
+        version=body.extension_version,
+    )
     return {"ok": True, "count": len(body.tabs)}
 
 

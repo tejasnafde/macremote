@@ -38,7 +38,7 @@ def test_ci_and_release_gate_native_app_and_extension_tests():
     release = (ROOT / ".github/workflows/release.yml").read_text()
     for workflow in (ci, release):
         assert "./gradlew testDebugUnitTest" in workflow
-        assert "node --test extension/mediaOp.test.mjs" in workflow
+        assert "node --test extension/*.test.mjs" in workflow
         assert "expo prebuild" not in workflow
 
 

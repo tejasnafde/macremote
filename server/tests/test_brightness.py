@@ -53,6 +53,20 @@ def test_brightness_gamma_step_and_clamp_floor(client, fake_hs, fake_m1ddc, gamm
     assert gamma_levels["LG ULTRAGEAR"] == 15
 
 
+def test_brightness_gamma_step_uses_live_level_after_macos_reset(
+    client, fake_hs, fake_m1ddc, gamma_levels
+):
+    fake_hs.set_output("100")
+    fake_m1ddc.set_response("display list", LG)
+    gamma_levels["LG ULTRAGEAR"] = 15
+
+    resp = client.post("/brightness/down?display=1", headers=AUTH_HEADERS)
+
+    assert resp.status_code == 200
+    assert gamma_levels["LG ULTRAGEAR"] == 92
+    assert any("getGamma" in call for call in fake_hs.calls)
+
+
 def test_brightness_set_external_gamma(client, fake_hs, fake_m1ddc, gamma_levels):
     fake_m1ddc.set_response("display list", LG)
 

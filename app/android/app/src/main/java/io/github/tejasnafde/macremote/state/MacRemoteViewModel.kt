@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.tejasnafde.macremote.MacRemoteApplication
 import io.github.tejasnafde.macremote.data.ApiException
 import io.github.tejasnafde.macremote.data.AppEntry
+import io.github.tejasnafde.macremote.data.AppListMerger
 import io.github.tejasnafde.macremote.data.AudioApp
 import io.github.tejasnafde.macremote.data.BrowserTab
 import io.github.tejasnafde.macremote.data.BrightnessRecovery
@@ -70,8 +71,9 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
     private var displayRefreshJob: Job? = null
     private var displaySyncJob: Job? = null
     private var volumeJob: Job? = null
-    private var volumeQueue = FinalWinsQueue<Int>()
+    private var volumeQueue = FinalWinsQueue<VolumeWrite>()
     private var volumeSignal = Channel<Unit>(Channel.CONFLATED)
+    private val volumeSync = VolumeSync()
     private var rememberedTabKey: String? = null
     private var rememberedTabAtMs = 0L
     private var probeGeneration = 0
@@ -218,6 +220,7 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun activatePolling(device: Device) {
         stopPolling()
+        volumeSync.reset()
         responseGate.activate(device.id)
         mutableState.update {
             it.copy(
@@ -247,7 +250,15 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
         if (showSpinner) mutableState.update { it.copy(refreshing = true) }
         try {
             val status = graph.api.status(device)
-            if (responseGate.accepts(token)) mutableState.update { it.copy(status = status, online = true, refreshing = false) }
+            if (responseGate.accepts(token)) {
+                mutableState.update {
+                    it.copy(
+                        status = status.copy(volume = volumeSync.displayed(status.volume)),
+                        online = true,
+                        refreshing = false,
+                    )
+                }
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
@@ -278,9 +289,18 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
             for (ignored in volumeSignal) {
                 var next = volumeQueue.takeNext()
                 while (next != null) {
-                    runCatching { graph.api.setVolume(device, next) }
-                        .onFailure { postError(it) }
+                    val result = runCatching { graph.api.setVolume(device, next.level) }
                     volumeQueue.completeInFlight()
+                    if (next.committed) {
+                        if (result.isSuccess) reconcileVolume(device, next)
+                        else {
+                            volumeSync.settle(next.generation)
+                            postError(result.exceptionOrNull()!!)
+                            refresh(device)
+                        }
+                    } else {
+                        result.onFailure { postError(it) }
+                    }
                     next = volumeQueue.takeNext()
                 }
             }
@@ -289,11 +309,35 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setVolume(level: Int, committed: Boolean) {
         val safe = level.coerceIn(0, 100)
+        val generation = volumeSync.offer(safe)
         mutableState.update { current ->
             current.copy(status = current.status?.copy(volume = safe, muted = if (safe > 0) false else current.status.muted))
         }
-        if (committed) volumeQueue.commit(safe) else volumeQueue.offerPreview(safe)
+        val write = VolumeWrite(safe, generation, committed)
+        if (committed) volumeQueue.commit(write) else volumeQueue.offerPreview(write)
         volumeSignal.trySend(Unit)
+    }
+
+    private suspend fun reconcileVolume(device: Device, write: VolumeWrite) {
+        volumeSync.complete(write.generation)
+        val token = responseGate.nextRequest()
+        try {
+            val status = graph.api.status(device)
+            if (!responseGate.accepts(token)) return
+            mutableState.update {
+                it.copy(
+                    status = status.copy(volume = volumeSync.displayed(status.volume)),
+                    online = true,
+                    refreshing = false,
+                )
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            if (responseGate.accepts(token)) {
+                mutableState.update { it.copy(online = false, refreshing = false) }
+            }
+        }
     }
 
     fun selectBrightnessTarget(displayId: String) {
@@ -383,9 +427,11 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             mutableState.update { it.copy(loadingApps = true) }
             val windowsResult = runCatching { graph.api.windows(device) }
-            val fallback = if (windowsResult.exceptionOrNull() is ApiException &&
-                (windowsResult.exceptionOrNull() as ApiException).status == 404
-            ) runCatching { graph.api.apps(device) }.getOrDefault(emptyList()) else emptyList()
+            val apps = runCatching { graph.api.apps(device) }.getOrDefault(emptyList())
+            val fallback = AppListMerger.withoutListedWindows(
+                windowsResult.getOrDefault(emptyList()),
+                apps,
+            )
             val audio = runCatching { graph.api.audioApps(device) }.getOrNull()
             if (state.value.activeDevice?.id == device.id) {
                 mutableState.update {
@@ -557,3 +603,9 @@ enum class RemoteAction {
     PlayPause, Next, Previous, SeekBack, SeekForward, VolumeUp, VolumeDown, Mute,
     BrightnessUp, BrightnessDown, Lock, Sleep, Blackout, ScreensOn, BanishCursor,
 }
+
+private data class VolumeWrite(
+    val level: Int,
+    val generation: Long,
+    val committed: Boolean,
+)
