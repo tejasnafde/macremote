@@ -6,17 +6,28 @@ from tests.conftest import AUTH_HEADERS
 @pytest.mark.parametrize(
     "path,expected_key",
     [
-        ("/media/playpause", "PLAY"),
+        ("/media/playpause", "macremote.playPause"),
         ("/media/next", "FAST"),
         ("/media/previous", "REWIND"),
     ],
 )
 def test_media_happy_path(client, fake_hs, path, expected_key):
+    fake_hs.set_output("mediakey")
     resp = client.post(path, headers=AUTH_HEADERS)
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
+    assert resp.json()["ok"] is True
     assert len(fake_hs.calls) == 1
     assert expected_key in fake_hs.calls[0]
+
+
+@pytest.mark.parametrize("via", ["mediakey", "stremio"])
+def test_playpause_reports_which_path_toggled(client, fake_hs, via):
+    """macremote.playPause() returns the path it took so the phone and the logs
+    can tell a system media key from a focused Stremio keystroke."""
+    fake_hs.set_output(via)
+    resp = client.post("/media/playpause", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "via": via}
 
 
 def test_media_hs_failure_returns_502_and_alerts(client, fake_hs, monkeypatch):

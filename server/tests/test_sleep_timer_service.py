@@ -81,7 +81,7 @@ async def test_expiry_fades_pauses_restores_volume_then_sleeps_and_alerts():
     await asyncio.wait_for(service._task, timeout=2)
 
     fade_calls = [c for c in hs_calls if "outputVolume() -" in c]
-    pause_calls = [c for c in hs_calls if 'newSystemKeyEvent("PLAY"' in c]
+    pause_calls = [c for c in hs_calls if "macremote.playPause" in c]
     restore_calls = [c for c in hs_calls if "setOutputVolume(math.max(0, math.min(100, 62)))" in c]
     sleep_calls = [c for c in hs_calls if "systemSleep" in c]
 
@@ -113,7 +113,7 @@ async def test_expiry_skips_pause_when_already_paused():
     service.start(minutes=1)
     await asyncio.wait_for(service._task, timeout=2)
 
-    pause_calls = [c for c in hs_calls if 'newSystemKeyEvent("PLAY"' in c]
+    pause_calls = [c for c in hs_calls if "macremote.playPause" in c]
     sleep_calls = [c for c in hs_calls if "systemSleep" in c]
     assert pause_calls == [], "must not toggle playback that is already paused"
     assert len(sleep_calls) == 1

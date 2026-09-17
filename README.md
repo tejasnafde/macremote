@@ -17,7 +17,7 @@ macOS: media keys · volume · brightness · lock · sleep
 
 ## Features
 
-- ⏯ Media keys (play/pause/next/previous — works with Spotify, YouTube, anything)
+- ⏯ Media keys (play/pause/next/previous — works with Spotify, YouTube, anything). Play/pause also reaches Stremio, which ignores media keys, by focusing it and pressing space when it is frontmost or fullscreen.
 - 🔊 Volume: step up/down, mute, absolute slider; ☀️ brightness
 - 🔒 Lock / 💤 sleep, and a **sleep timer** that fades the volume out and puts
   the Mac to sleep — cancel any time, live countdown in the app

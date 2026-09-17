@@ -17,8 +17,10 @@ router = APIRouter(
 
 @router.post("/playpause")
 async def playpause() -> dict:
-    await media_handler.playpause()
-    return {"ok": True}
+    """Toggle playback. `via` names the path taken: mediakey, or a player
+    (stremio) that needed a focused keystroke."""
+    via = await media_handler.playpause()
+    return {"ok": True, "via": via}
 
 
 @router.post("/next")

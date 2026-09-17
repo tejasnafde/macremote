@@ -8,8 +8,10 @@ from common_helper.hs_bridge import run_hs
 
 
 @log_timing("media.playpause")
-async def playpause() -> None:
-    await asyncio.to_thread(run_hs, lua.MEDIA_PLAYPAUSE)
+async def playpause() -> str:
+    """Returns which path handled the toggle: "mediakey" (system PLAY key) or
+    the name of a focus player such as "stremio". See macremote.playPause()."""
+    return await asyncio.to_thread(run_hs, lua.MEDIA_PLAYPAUSE)
 
 
 @log_timing("media.next")

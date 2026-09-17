@@ -1,15 +1,15 @@
 """Lua snippets sent to Hammerspoon via `hs -c`. The Mac-side `macremote.lua`
-(hammerspoon/, built in P2) provides the `macremote` global used below (currently
-just `macremote.nowPlaying()`); everything else calls stock `hs.*` APIs directly.
+(hammerspoon/) provides the `macremote` global used below (`nowPlaying()` and
+`playPause()`); everything else calls stock `hs.*` APIs directly.
 """
 
 # ── Media keys ────────────────────────────────────────────────────────────────
 # hs.eventtap.event.newSystemKeyEvent(key, isDown):post() - press then release.
 
-MEDIA_PLAYPAUSE = (
-    'hs.eventtap.event.newSystemKeyEvent("PLAY", true):post(); '
-    'hs.eventtap.event.newSystemKeyEvent("PLAY", false):post()'
-)
+# Play/pause lives in macremote.lua: it must pick between the system PLAY key
+# and a focused keystroke for players macOS cannot route to (Stremio). Returns
+# the path taken ("mediakey" or the player name).
+MEDIA_PLAYPAUSE = "return macremote.playPause()"
 
 MEDIA_NEXT = (
     'hs.eventtap.event.newSystemKeyEvent("FAST", true):post(); '
