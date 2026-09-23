@@ -30,6 +30,19 @@ const REPORT_INTERVAL_SECONDS = 5;
 const POLL_INTERVAL_ACTIVE_SECONDS = 2;
 const POLL_INTERVAL_IDLE_SECONDS = 15;
 const KNOWN_TABS_KEY = "macremoteKnownTabs";
+const WATCHDOG_ALARM = "macremote-watchdog";
+// A hung fetch (Mac asleep, Tailscale reconnecting) or a frozen tab probe used
+// to block the report chain forever, and with it every later alarm: the bridge
+// "died" until opening about:addons woke the script and re-ran start().
+const FETCH_TIMEOUT_MS = 5000;
+const REPORT_TIMEOUT_MS = 15000;
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), ms)),
+  ]);
+}
 
 function hostFromUrl(url) {
   try {
@@ -56,6 +69,7 @@ async function setKnownTabs(map) {
 function serverFetch(config, path, options) {
   const base = config.serverUrl.replace(/\/$/, "");
   return fetch(`${base}${path}`, {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     ...options,
     headers: {
       ...(options && options.headers),
@@ -134,7 +148,8 @@ async function queryCandidateTabs(tabsApi = api.tabs) {
 let reportChain = Promise.resolve(0);
 
 function queueReport() {
-  reportChain = reportChain.then(collectAndReport, collectAndReport);
+  const run = () => withTimeout(collectAndReport(), REPORT_TIMEOUT_MS, "report");
+  reportChain = reportChain.then(run, run);
   return reportChain;
 }
 
@@ -422,17 +437,28 @@ function scheduleAlarm(name, seconds) {
   api.alarms.create(name, { delayInMinutes: seconds / 60 });
 }
 
+// Each handler reschedules itself in `finally`, so a failed or timed-out
+// report can never end the alarm chain.
 async function handleReportAlarm() {
-  const tabCount = await queueReport();
-  scheduleAlarm(REPORT_ALARM, REPORT_INTERVAL_SECONDS);
-  scheduleAlarm(POLL_ALARM, tabCount > 0 ? POLL_INTERVAL_ACTIVE_SECONDS : POLL_INTERVAL_IDLE_SECONDS);
+  try {
+    await queueReport();
+  } catch (err) {
+    console.error("macremote: report failed", err);
+  } finally {
+    scheduleAlarm(REPORT_ALARM, REPORT_INTERVAL_SECONDS);
+  }
 }
 
 async function handlePollAlarm() {
-  await pollCommands();
-  const known = await getKnownTabs();
-  const hasMediaTabs = Object.keys(known).length > 0;
-  scheduleAlarm(POLL_ALARM, hasMediaTabs ? POLL_INTERVAL_ACTIVE_SECONDS : POLL_INTERVAL_IDLE_SECONDS);
+  let hasMediaTabs = false;
+  try {
+    await withTimeout(pollCommands(), REPORT_TIMEOUT_MS, "poll");
+    hasMediaTabs = Object.keys(await getKnownTabs()).length > 0;
+  } catch (err) {
+    console.error("macremote: poll failed", err);
+  } finally {
+    scheduleAlarm(POLL_ALARM, hasMediaTabs ? POLL_INTERVAL_ACTIVE_SECONDS : POLL_INTERVAL_IDLE_SECONDS);
+  }
 }
 
 api.alarms.onAlarm.addListener((alarm) => {
@@ -440,12 +466,22 @@ api.alarms.onAlarm.addListener((alarm) => {
     handleReportAlarm();
   } else if (alarm.name === POLL_ALARM) {
     handlePollAlarm();
+  } else if (alarm.name === WATCHDOG_ALARM) {
+    ensureLoop();
   }
 });
+
+// ponytail: backstop for anything the finally blocks miss (e.g. the browser
+// dropping a one-shot alarm across sleep). Recreates only missing alarms.
+async function ensureLoop() {
+  if (!(await api.alarms.get(REPORT_ALARM))) scheduleAlarm(REPORT_ALARM, REPORT_INTERVAL_SECONDS);
+  if (!(await api.alarms.get(POLL_ALARM))) scheduleAlarm(POLL_ALARM, POLL_INTERVAL_IDLE_SECONDS);
+}
 
 function start() {
   scheduleAlarm(REPORT_ALARM, REPORT_INTERVAL_SECONDS);
   scheduleAlarm(POLL_ALARM, POLL_INTERVAL_IDLE_SECONDS);
+  api.alarms.create(WATCHDOG_ALARM, { periodInMinutes: 1 });
 }
 
 api.runtime.onInstalled.addListener((details) => {
