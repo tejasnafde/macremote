@@ -7,7 +7,7 @@ all degrade to brightness: null (or an empty external list), never a 5xx."""
 import asyncio
 
 from common_helper import lua_snippets as lua
-from common_helper.ddc_bridge import DDCError, parse_display_list, run_m1ddc
+from common_helper.ddc_bridge import DDCError, builtin_screen_uuids, parse_display_list, run_m1ddc
 from common_helper.decorators import log_timing
 from common_helper.hs_bridge import HSError, run_hs
 from handler import brightness_handler
@@ -31,9 +31,7 @@ async def _external_displays() -> list[dict]:
         raw = await asyncio.to_thread(run_m1ddc, ["display", "list"])
     except DDCError:
         return []
-    # m1ddc lists a phantom "(null)" entry on some Macs; controlling it always
-    # fails, so hide it.
-    return [d for d in parse_display_list(raw) if d.get("name") and d["name"] != "(null)"]
+    return parse_display_list(raw, await asyncio.to_thread(builtin_screen_uuids))
 
 
 async def _external_brightness(index: int) -> int | None:
@@ -71,7 +69,7 @@ async def get_displays() -> dict:
         displays.append(
             {
                 "id": str(disp["index"]),
-                "name": disp["name"],
+                "name": disp["label"],
                 "builtin": False,
                 "brightness": await _external_brightness(disp["index"]),
                 # Gamma-dimming level (100 = undimmed) so the app can show the

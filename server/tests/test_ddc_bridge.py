@@ -18,7 +18,7 @@ def test_parse_display_list_canned_sample():
     # The "(null)" phantom is dropped (DDC writes never stick on it); only the
     # real, named monitor survives.
     assert parse_display_list(SAMPLE_LIST) == [
-        {"index": 2, "name": "LG ULTRAGEAR"},
+        {"index": 2, "name": "LG ULTRAGEAR", "label": "LG ULTRAGEAR"},
     ]
 
 
@@ -54,3 +54,17 @@ def test_run_m1ddc_timeout_raises(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
     with pytest.raises(DDCError):
         run_m1ddc(["display", "list"])
+
+
+def test_unnamed_external_kept_by_uuid_builtin_dropped():
+    """A monitor behind a name-stripping adapter lists as "(null)", same as the
+    built-in panel. Only the built-in may be dropped (2026-09-24)."""
+    raw = (
+        "[1] (null) (37D8832A-2D66-02CA-B9F7-8F30A301B230)\n"
+        "[2] (null) (E4DB018A-E193-64D6-0857-D6964E3302DB)\n"
+    )
+    builtin = {"37D8832A-2D66-02CA-B9F7-8F30A301B230"}
+    assert parse_display_list(raw, builtin) == [
+        {"index": 2, "name": "E4DB018A-E193-64D6-0857-D6964E3302DB", "label": "External display"}
+    ]
+    assert parse_display_list(raw) == [], "unknown built-in: hide unnamed entries as before"

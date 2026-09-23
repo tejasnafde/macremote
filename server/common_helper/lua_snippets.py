@@ -230,6 +230,15 @@ def focus_window(window_id: int) -> str:
 
 
 # ── Gamma dimming (external-display fallback when DDC/CI is unavailable) ─────
+# Comma-separated UUIDs of built-in panels, so an unnamed m1ddc entry can be
+# told apart from the Mac's own screen. Matches Hammerspoon's "Built-in ..." name.
+BUILTIN_SCREEN_UUIDS = (
+    "local o = {}; for _, s in ipairs(hs.screen.allScreens()) do "
+    'if (s:name() or ""):find("^Built%-in") then o[#o+1] = s:getUUID() end end; '
+    'return table.concat(o, ",")'
+)
+
+
 # Framebuffer dimming via hs.screen:setGamma(whitepoint, blackpoint) - works
 # over any cable (verified live on real external hardware), but the backlight
 # stays on. level is 0-100 where 100 = no dimming.

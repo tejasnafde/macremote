@@ -12,7 +12,7 @@ levels live in-memory per display NAME (100 = undimmed) and are clamped to a
 import asyncio
 
 from common_helper import lua_snippets as lua
-from common_helper.ddc_bridge import DDCError, parse_display_list, run_m1ddc
+from common_helper.ddc_bridge import DDCError, builtin_screen_uuids, parse_display_list, run_m1ddc
 from common_helper.decorators import log_timing
 from common_helper.hs_bridge import HSError, run_hs
 from config.settings import settings
@@ -83,7 +83,7 @@ async def _external_name(display: str) -> str:
     same screen through Hammerspoon for gamma). Raises DDCError when even the
     list is unavailable - then both control paths are genuinely dead."""
     raw = await asyncio.to_thread(run_m1ddc, ["display", "list"])
-    for disp in parse_display_list(raw):
+    for disp in parse_display_list(raw, await asyncio.to_thread(builtin_screen_uuids)):
         if str(disp["index"]) == str(display):
             return disp["name"]
     raise DDCError(f"no external display at m1ddc index {display!r}")
