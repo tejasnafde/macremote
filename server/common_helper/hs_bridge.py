@@ -57,6 +57,21 @@ def _invoke(lua: str) -> subprocess.CompletedProcess:
         )
 
 
+def _hammerspoon_running() -> bool:
+    return subprocess.run(["pgrep", "-x", "Hammerspoon"], capture_output=True).returncode == 0
+
+
+def _relaunch_hammerspoon() -> bool:
+    """Start Hammerspoon if it is not running. It quit cleanly overnight on
+    2026-09-24 with no crash report, and every /status then timed out until
+    morning. Returns True when it had to be started."""
+    if _hammerspoon_running():
+        return False
+    subprocess.run(["open", "-ga", "Hammerspoon"], capture_output=True, timeout=10)
+    time.sleep(3)  # IPC answered 2s after launch when measured
+    return True
+
+
 def run_hs(lua: str) -> str:
     """Run a Lua snippet through `hs -c <lua>` and return its stdout, sanitized.
 
@@ -69,7 +84,14 @@ def run_hs(lua: str) -> str:
     it instead of surfacing a 502 + Discord alert.
     """
     try:
-        result = _invoke(lua)
+        try:
+            result = _invoke(lua)
+        except subprocess.TimeoutExpired:
+            # ponytail: only a missing app gets a retry; a hung-but-running
+            # Hammerspoon still fails after 5s, as before.
+            if not _relaunch_hammerspoon():
+                raise
+            result = _invoke(lua)
         if result.returncode != 0 and _is_transient_ipc(result.stderr):
             time.sleep(0.4)
             result = _invoke(lua)
