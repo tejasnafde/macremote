@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Release macremote: bump versions, tag, push. CI does the rest
-# (tests -> signed native APK -> GitHub Release -> Discord notification).
+# (tests -> signed native GitHub-flavor APK -> GitHub Release -> Discord notification).
 set -euo pipefail
 
 V="${1:?usage: ship.sh X.Y.Z}"

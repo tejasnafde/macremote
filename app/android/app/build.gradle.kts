@@ -11,12 +11,25 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "io.github.tejasnafde.macremote"
         minSdk = 24
         targetSdk = 36
         versionCode = 26
         versionName = "0.5.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") {
+            dimension = "distribution"
+            applicationId = "io.github.tejasnafde.macremote"
+            buildConfigField("boolean", "ENABLE_SELF_UPDATES", "true")
+        }
+        create("play") {
+            dimension = "distribution"
+            applicationId = "app.tn07.macremote"
+            buildConfigField("boolean", "ENABLE_SELF_UPDATES", "false")
+        }
     }
 
     buildFeatures {

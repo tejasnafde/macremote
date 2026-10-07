@@ -95,6 +95,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.tejasnafde.macremote.BuildConfig
 import io.github.tejasnafde.macremote.data.AudioApp
 import io.github.tejasnafde.macremote.data.BrowserTab
 import io.github.tejasnafde.macremote.data.Device
@@ -292,24 +293,26 @@ fun DevicesScreen(state: MacRemoteUiState, viewModel: MacRemoteViewModel, paddin
                     )
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            val update = UpdatePresentation.create(state.checkingForUpdate, state.latestRelease, state.updateProgress)
-            OutlinedButton(
-                onClick = { viewModel.checkForUpdate() },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = update.checkEnabled,
-            ) {
-                if (state.checkingForUpdate) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Rounded.Refresh, null)
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(update.checkLabel)
-            }
-            if (state.latestRelease != null) {
+            if (BuildConfig.ENABLE_SELF_UPDATES) {
                 Spacer(Modifier.height(10.dp))
-                UpdateAction(state, viewModel)
+                val update = UpdatePresentation.create(state.checkingForUpdate, state.latestRelease, state.updateProgress)
+                OutlinedButton(
+                    onClick = { viewModel.checkForUpdate() },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = update.checkEnabled,
+                ) {
+                    if (state.checkingForUpdate) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Rounded.Refresh, null)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(update.checkLabel)
+                }
+                if (state.latestRelease != null) {
+                    Spacer(Modifier.height(10.dp))
+                    UpdateAction(state, viewModel)
+                }
             }
         }
     }

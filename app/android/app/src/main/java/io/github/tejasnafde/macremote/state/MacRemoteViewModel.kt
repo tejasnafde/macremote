@@ -3,6 +3,7 @@ package io.github.tejasnafde.macremote.state
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.tejasnafde.macremote.BuildConfig
 import io.github.tejasnafde.macremote.MacRemoteApplication
 import io.github.tejasnafde.macremote.data.ApiException
 import io.github.tejasnafde.macremote.data.AppEntry
@@ -99,7 +100,7 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
                 true,
             )
         }
-        checkForUpdate(manual = false)
+        if (BuildConfig.ENABLE_SELF_UPDATES) checkForUpdate(manual = false)
     }
 
     fun navigate(screen: AppScreen) {
@@ -459,6 +460,7 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun checkForUpdate(manual: Boolean = true) {
+        if (!BuildConfig.ENABLE_SELF_UPDATES) return
         if (manual && state.value.checkingForUpdate) return
         if (manual) mutableState.update { it.copy(checkingForUpdate = true) }
         viewModelScope.launch {
@@ -482,6 +484,7 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun installUpdate() {
+        if (!BuildConfig.ENABLE_SELF_UPDATES) return
         val release = state.value.latestRelease ?: return
         if (state.value.updateProgress != null) return
         mutableState.update { it.copy(updateProgress = 0) }
