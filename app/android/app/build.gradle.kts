@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -9,6 +10,15 @@ plugins {
 android {
     namespace = "io.github.tejasnafde.macremote"
     compileSdk = 36
+
+    val localKeystoreInfo = Properties()
+    val localKeystoreInfoFile = file("${System.getProperty("user.home")}/.macremote/keystore.info")
+    if (localKeystoreInfoFile.isFile) {
+        localKeystoreInfoFile.inputStream().use(localKeystoreInfo::load)
+    }
+    val releaseKeystoreFile = System.getenv("ANDROID_KEYSTORE_PATH")
+        ?.let(::file)
+        ?: file("${System.getProperty("user.home")}/.macremote/release.keystore")
 
     defaultConfig {
         minSdk = 24
@@ -35,6 +45,34 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    signingConfigs {
+        create("release") {
+            val storePasswordValue = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                ?: localKeystoreInfo.getProperty("STOREPASS")
+            val keyAliasValue = System.getenv("ANDROID_KEY_ALIAS")
+                ?: localKeystoreInfo.getProperty("ALIAS")
+            val keyPasswordValue = System.getenv("ANDROID_KEY_PASSWORD")
+                ?: localKeystoreInfo.getProperty("KEYPASS")
+                ?: storePasswordValue
+
+            if (releaseKeystoreFile.isFile && storePasswordValue != null && keyAliasValue != null && keyPasswordValue != null) {
+                storeFile = releaseKeystoreFile
+                storePassword = storePasswordValue
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            val releaseSigning = signingConfigs.getByName("release")
+            if (releaseSigning.storeFile != null) {
+                signingConfig = releaseSigning
+            }
+        }
     }
 
     compileOptions {
