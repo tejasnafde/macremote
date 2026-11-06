@@ -115,8 +115,21 @@ function mergeCandidateTabs(audibleTabs, activeTabs, known) {
   return candidates;
 }
 
+// A probe alone is weak evidence: Gmail and chat apps keep short, never-played
+// <audio> elements for notification sounds, and reporting them put private tab
+// titles ("Inbox (1,841)") on the phone as media cards (2026-11-06). A media
+// element counts when it plays, has started, or is long enough to be content.
+const MIN_CONTENT_SECONDS = 30;
+
+function isRealMedia(probe) {
+  if (probe == null) return false;
+  // Older page scripts did not send these fields: keep the old behaviour.
+  if (probe.duration === undefined) return true;
+  return !probe.paused || probe.currentTime > 0 || probe.duration >= MIN_CONTENT_SECONDS;
+}
+
 function shouldReportCandidate(candidate, probe) {
-  return candidate.audible || probe != null ||
+  return candidate.audible || isRealMedia(probe) ||
     (candidate.wasKnown && candidate.keepWithoutProbe);
 }
 
@@ -283,6 +296,8 @@ function mediaOp(op, arg) {
   if (op === "probe") {
     return {
       paused: el.paused,
+      duration: el.duration,
+      currentTime: el.currentTime || 0,
       volume: Math.round((el.volume || 0) * 100),
       playbackRate: el.playbackRate,
       fullscreen: document.fullscreenElement != null,

@@ -25,8 +25,10 @@ const queryCandidateTabs = new Function(
 const shouldStart = src.indexOf("function shouldReportCandidate(");
 const shouldEnd = src.indexOf("\n}", shouldStart) + 2;
 assert.ok(shouldStart > 0, "shouldReportCandidate not found in background.js");
+const realStart = src.indexOf("const MIN_CONTENT_SECONDS");
+assert.ok(realStart > 0 && realStart < shouldStart, "isRealMedia must precede shouldReportCandidate");
 const shouldReportCandidate = new Function(
-  `${src.slice(shouldStart, shouldEnd)}; return shouldReportCandidate;`
+  `${src.slice(realStart, shouldEnd)}; return shouldReportCandidate;`
 )();
 const frameStart = src.indexOf("function nextFrameId(");
 const frameEnd = src.indexOf("\n}", frameStart) + 2;
@@ -89,3 +91,28 @@ assert.equal(nextFrameId(12, { result: null, frameId: null }), 12, "failed probe
 assert.equal(nextFrameId(12, { result: { paused: false }, frameId: 7 }), 7, "successful probe refreshes the frame");
 
 console.log("discovery: all checks passed");
+
+assert.equal(
+  shouldReportCandidate(
+    { audible: false, wasKnown: false, keepWithoutProbe: false },
+    { paused: true, duration: 1.2, currentTime: 0 },
+  ),
+  false,
+  "an unplayed notification sound (Gmail) is not media",
+);
+assert.equal(
+  shouldReportCandidate(
+    { audible: false, wasKnown: false, keepWithoutProbe: false },
+    { paused: true, duration: 600, currentTime: 0 },
+  ),
+  true,
+  "a paused, unstarted video is still media",
+);
+assert.equal(
+  shouldReportCandidate(
+    { audible: false, wasKnown: false, keepWithoutProbe: false },
+    { paused: true, duration: 12, currentTime: 4 },
+  ),
+  true,
+  "a short clip the user started is media",
+);
