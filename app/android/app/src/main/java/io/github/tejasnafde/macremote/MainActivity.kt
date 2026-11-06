@@ -1,6 +1,8 @@
 package io.github.tejasnafde.macremote
 
+import android.os.Build
 import android.os.Bundle
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -15,6 +17,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // The API token field triggered "Save password to Google Password
+        // Manager". No field here should be autofilled or saved, so opt the
+        // whole window out of Autofill.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            window.decorView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+        }
         setContent {
             MacRemoteTheme {
                 MacRemoteApp(viewModel)
