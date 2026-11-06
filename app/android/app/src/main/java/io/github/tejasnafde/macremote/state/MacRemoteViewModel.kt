@@ -77,6 +77,7 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
     private val volumeSync = VolumeSync()
     private var rememberedTabKey: String? = null
     private var rememberedTabAtMs = 0L
+    private var tabOverride: TabPlaybackOverride? = null
     private var probeGeneration = 0
     private var appForeground = false
 
@@ -252,9 +253,11 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
         try {
             val status = graph.api.status(device)
             if (responseGate.accepts(token)) {
+                val (shown, kept) = tabOverride?.applyTo(status, System.currentTimeMillis()) ?: (status to null)
+                tabOverride = kept
                 mutableState.update {
                     it.copy(
-                        status = status.copy(volume = volumeSync.displayed(status.volume)),
+                        status = shown.copy(volume = volumeSync.displayed(shown.volume)),
                         online = true,
                         refreshing = false,
                     )
@@ -380,7 +383,9 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
                 if (tab == null) graph.api.playPause(device)
                 else {
                     rememberTab(tab)
-                    graph.api.tabCommand(device, tab, if (tab.playing) "pause" else "play")
+                    val action = if (tab.playing) "pause" else "play"
+                    graph.api.tabCommand(device, tab, action)
+                    holdTabPlayback(tab, action)
                 }
             }
             RemoteAction.Next -> graph.api.next(device)
@@ -406,6 +411,18 @@ class MacRemoteViewModel(application: Application) : AndroidViewModel(applicatio
     fun tabCommand(tab: BrowserTab, action: String, value: Int? = null) = withDevice {
         if (action == "play" || action == "pause") rememberTab(tab)
         graph.api.tabCommand(it, tab, action, value)
+        holdTabPlayback(tab, action)
+    }
+
+    /** Show the requested play state at once and through stale refreshes. */
+    private fun holdTabPlayback(tab: BrowserTab, action: String) {
+        if (action != "play" && action != "pause") return
+        val override = TabPlaybackOverride(tab.key, action == "play", System.currentTimeMillis() + TabPlaybackOverride.HOLD_MS)
+        tabOverride = override
+        mutableState.update { current ->
+            val status = current.status ?: return@update current
+            current.copy(status = override.applyTo(status, System.currentTimeMillis()).first)
+        }
     }
 
     fun tabFullscreen(tab: BrowserTab) = withDevice { device ->
