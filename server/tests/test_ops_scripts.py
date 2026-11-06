@@ -37,7 +37,8 @@ def test_ci_and_release_gate_native_app_and_extension_tests():
     ci = (ROOT / ".github/workflows/ci.yml").read_text()
     release = (ROOT / ".github/workflows/release.yml").read_text()
     for workflow in (ci, release):
-        assert "./gradlew testDebugUnitTest" in workflow
+        # Both distribution flavors must be gated: the Play build drops the updater.
+        assert "./gradlew testGithubDebugUnitTest testPlayDebugUnitTest" in workflow
         assert "node --test extension/*.test.mjs" in workflow
         assert "expo prebuild" not in workflow
 
