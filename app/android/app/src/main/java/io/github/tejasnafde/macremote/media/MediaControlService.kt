@@ -32,6 +32,12 @@ class MediaControlService : Service() {
     private val playbackGate = AbsolutePlaybackGate()
     private var pollJob: Job? = null
 
+    // Everything System UI shows for this session. OxygenOS rebuilds its
+    // status-bar media card on every session or notification update, so an
+    // unconditional publish each poll kept System UI near 50% CPU (2026-11-06).
+    private data class Shown(val playing: Boolean?, val title: String, val artist: String, val deviceName: String?)
+    private var shown: Shown? = null
+
     override fun onCreate() {
         super.onCreate()
         createChannel()
@@ -66,39 +72,63 @@ class MediaControlService : Service() {
             active?.let { target ->
                 runCatching { graph().api.status(target) }.onSuccess { status ->
                     playbackGate.observe(status.browserTabs.any { it.playing } || status.nowPlaying?.isPlaying == true)
-                    val playback = if (playbackGate.current == true) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED
-                    session.setPlaybackState(
-                        PlaybackState.Builder()
-                            .setActions(
-                                PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
-                                    PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS,
-                            )
-                            .setState(playback, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
-                            .build(),
+                    publish(
+                        title = status.nowPlaying?.title ?: target.name,
+                        artist = status.nowPlaying?.artist ?: "macremote",
                     )
-                    session.setMetadata(
-                        MediaMetadata.Builder()
-                            .putString(MediaMetadata.METADATA_KEY_TITLE, status.nowPlaying?.title ?: target.name)
-                            .putString(MediaMetadata.METADATA_KEY_ARTIST, status.nowPlaying?.artist ?: "macremote")
-                            .build(),
-                    )
-                    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
                 }
             }
             delay(5_000)
         }
     }
 
+    /**
+     * Push state to the session and the notification, but only when something
+     * System UI shows has changed. The session's playback state must move with
+     * every tap: the quick-settings player picks play or pause from it, so a
+     * stale "playing" turned a quick second tap into a second, ignored pause.
+     */
+    @Synchronized
+    private fun publish(title: String = shown?.title ?: "", artist: String = shown?.artist ?: "macremote") {
+        val next = Shown(playbackGate.current, title, artist, device?.name)
+        val previous = shown
+        if (next == previous) return
+        shown = next
+        if (previous == null || previous.playing != next.playing) {
+            val playback = if (next.playing == true) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED
+            session.setPlaybackState(
+                PlaybackState.Builder()
+                    .setActions(
+                        PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
+                            PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS,
+                    )
+                    .setState(playback, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
+                    .build(),
+            )
+        }
+        if (previous == null || previous.title != next.title || previous.artist != next.artist) {
+            session.setMetadata(
+                MediaMetadata.Builder()
+                    .putString(MediaMetadata.METADATA_KEY_TITLE, next.title)
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, next.artist)
+                    .build(),
+            )
+        }
+        if (previous == null || previous.playing != next.playing || previous.deviceName != next.deviceName) {
+            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
+        }
+    }
+
     private fun requestAbsolutePlayback(shouldPlay: Boolean) {
         val target = device ?: return
         val transition = playbackGate.begin(shouldPlay) ?: return
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
+        publish()
         scope.launch {
             runCatching { graph().api.playPause(target) }
                 .onSuccess { playbackGate.succeeded(transition) }
                 .onFailure {
                     playbackGate.failed(transition)
-                    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
+                    publish()
                 }
         }
     }
