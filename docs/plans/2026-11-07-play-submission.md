@@ -1,8 +1,16 @@
 # Google Play submission (macremote: Remote for Mac)
 
-Status on 2026-11-07: **not submitted**. Everything off-console is ready. The
-console run stopped before it saved anything, because another agent was driving
-the same Chromium window (see "Resume").
+Status on 2026-11-07: **submitted, In review** (Play Console app id
+`4973925884914018466`, production release 0.5.7 (27), 178 countries). App
+content says "You're all caught up". The full console log is
+`/Users/Shared/macremote-play/console-report.md`.
+
+How it got there: the first runs collided with another agent on the shared
+Chromium, then the computer-use tool required the user's confirmation inside
+the Codex session for each legal agreement (Create app boxes, IARC terms); it
+was passed as the direct reply via `codex exec resume`. A starved Chromium tab
+went blank twice; a fresh tab fixed it. `.codex-jdhs` hit its usage limit and
+the last run finished on `.codex-default` (`gpt-6-luna`).
 
 ## Ready
 
